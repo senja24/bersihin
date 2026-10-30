@@ -51,6 +51,6 @@ var wantTS = []string{
 	"export const Confirm = {", "clean(scanID: string, ids: string[])", "trash(scanID: string, paths: string[])", "uninstall(scanID: string, id: string)", "startup(id: string, enabled: boolean)",
 	"export const Protection = {", "status(): Promise<ProtectionStatus>",
 	"export const Settings = {", "get(): Promise<Settings>", "set(patch: SettingsPatch)", "setApiKey(provider: AiProvider, key: string | null)",
-	"export const Assistant = {", "ask(question: string, data: AiContext): Promise<AiAdvice>",
+	"export const Assistant = {", "ask(question: string, data: AiContext): Promise<AiAdvice>", "testConnection(provider: AiProvider, draft: AiEndpointPatch | null)",
 	"export const events", "progress",
 }

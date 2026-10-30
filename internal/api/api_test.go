@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -412,5 +413,78 @@ func TestSettingsAndAssistantEndToEnd(t *testing.T) {
 	}
 	if strings.Contains(gotBody, home) || !strings.Contains(gotBody, "~/Movies/a.mkv") {
 		t.Errorf("home folder not redacted: %s", gotBody)
+	}
+}
+
+func TestCompatibleProviderEndToEnd(t *testing.T) {
+	var hits int
+	var gotAuth, gotPath, gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		gotAuth, gotPath, gotUA = r.Header.Get("authorization"), r.URL.Path, r.Header.Get("user-agent")
+		io.WriteString(w, `{"choices":[{"finish_reason":"stop","message":{"content":"{\"answer\":\"Fine.\",\"suggestions\":[]}"}}]}`)
+	}))
+	defer srv.Close()
+
+	dir := filepath.Join(t.TempDir(), "data")
+	kc := &memKeychain{m: map[string][]byte{}}
+	svc := New(Deps{
+		Home: t.TempDir(), Shell: &fakeShell{}, DataDir: func() (string, error) { return dir, nil }, Secrets: kc,
+		AppVersion: func() string { return "9.9.9" },
+	})
+	ctx := context.Background()
+	p := model.ProviderOpenAICompat
+	if _, err := svc.Settings.Set(model.SettingsPatch{AiProvider: &p}); err != nil {
+		t.Fatal(err)
+	}
+
+	// not set up: a clear message, nothing sent
+	if _, err := svc.Assistant.Ask(ctx, "hi", model.AiContext{}); err == nil || !strings.Contains(err.Error(), "Set up your OpenAI-compatible provider") {
+		t.Fatalf("err = %v", err)
+	}
+	res, err := svc.Assistant.TestConnection(ctx, p, nil)
+	if err != nil || res.OK || res.Code != "bad_url" {
+		t.Fatalf("res %+v err %v", res, err)
+	}
+
+	base, mdl := srv.URL+"/v1", "llama-3"
+	got, err := svc.Settings.Set(model.SettingsPatch{OpenAiCompat: &model.AiEndpointPatch{BaseUrl: &base, Model: &mdl}})
+	if err != nil || got.OpenAiCompat.BaseUrl != base || got.OpenAiCompat.HasKey {
+		t.Fatalf("got %+v err %v", got, err)
+	}
+	if res, _ = svc.Assistant.TestConnection(ctx, p, nil); res.Code != "no_key" {
+		t.Fatalf("res %+v", res)
+	}
+	const key = "local-key"
+	if got, err = svc.Settings.SetApiKey(p, &[]string{key}[0]); err != nil || !got.OpenAiCompat.HasKey || got.HasOpenAiKey {
+		t.Fatalf("got %+v err %v", got, err)
+	}
+	if res, err = svc.Assistant.TestConnection(ctx, p, nil); err != nil || !res.OK || res.Mode != "structured" {
+		t.Fatalf("res %+v err %v", res, err)
+	}
+	if gotAuth != "Bearer "+key || gotPath != "/v1/chat/completions" || gotUA != "Bersihin/9.9.9" {
+		t.Errorf("auth %q path %q ua %q", gotAuth, gotPath, gotUA)
+	}
+	adv, err := svc.Assistant.Ask(ctx, "hi", model.AiContext{})
+	if err != nil || adv.Answer != "Fine." || adv.Provider != p {
+		t.Fatalf("adv %+v err %v", adv, err)
+	}
+
+	// the key never reaches the page or the settings file
+	b, _ := json.Marshal(svc.Settings.Get())
+	f, _ := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if strings.Contains(string(b)+string(f), key) {
+		t.Fatal("key leaked")
+	}
+
+	// a new host drops the key; testing a draft on that host does not send it
+	before := hits
+	other := "https://other.example.org/v1"
+	got, err = svc.Settings.Set(model.SettingsPatch{OpenAiCompat: &model.AiEndpointPatch{BaseUrl: &other}})
+	if err != nil || got.OpenAiCompat.HasKey || kc.m[config.OpenAICompatKeyName] != nil {
+		t.Fatalf("got %+v err %v", got, err)
+	}
+	if res, _ = svc.Assistant.TestConnection(ctx, p, &model.AiEndpointPatch{BaseUrl: &base}); res.OK || hits != before {
+		t.Fatalf("res %+v hits %d->%d", res, before, hits)
 	}
 }

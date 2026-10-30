@@ -24,11 +24,20 @@ func (s *Settings) SetApiKey(provider model.AiProvider, key *string) (model.Sett
 	return s.c.settings.SetKey(provider, key)
 }
 
-// Assistant asks Claude or ChatGPT what is safe to remove.
+// Assistant asks Claude, ChatGPT or a compatible server what is safe to remove.
 type Assistant struct{ c *core }
 
 // Ask sends the question and the context (names, paths and sizes, with the
 // home folder shown as ~) to the provider chosen in the settings.
 func (a *Assistant) Ask(ctx context.Context, question string, data model.AiContext) (model.AiAdvice, error) {
 	return a.c.assistant.Ask(ctx, question, data)
+}
+
+// TestConnection sends one tiny request to the provider with its saved API
+// key and reports how it went: ok, or a code and a message that explain what
+// to fix. draft may carry an address and model the user is still editing; its
+// host must be the saved one (save a new host first), so a stored key never
+// goes to a host that was not saved. The page never sends or receives a key.
+func (a *Assistant) TestConnection(ctx context.Context, provider model.AiProvider, draft *model.AiEndpointPatch) (model.AiTestResult, error) {
+	return a.c.assistant.TestConnection(ctx, provider, draft)
 }

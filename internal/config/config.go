@@ -21,12 +21,23 @@ const (
 const (
 	AssistantTimeout   = 180 * time.Second
 	AssistantMaxTokens = 8000
+	// AssistantTestTimeout and AssistantTestMaxTokens limit the "Test
+	// connection" request.
+	AssistantTestTimeout   = 20 * time.Second
+	AssistantTestMaxTokens = 256
+	// AssistantMaxResponse is the largest answer read from a server;
+	// AssistantMaxErrorBody the part of an error body that is looked at.
+	AssistantMaxResponse  = 4 << 20
+	AssistantMaxErrorBody = 4 << 10
 )
 
 // Names of the Keychain entries (service = the app identifier, chosen by MyGo).
 const (
 	ClaudeKeyName = "claude-api-key"
 	OpenAIKeyName = "openai-api-key"
+
+	ClaudeCompatKeyName = "claude-compatible-api-key"
+	OpenAICompatKeyName = "openai-compatible-api-key"
 )
 
 // ProgressInterval is how often scan progress reaches the page.
