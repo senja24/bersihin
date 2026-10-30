@@ -396,7 +396,7 @@
   font-size: var(--text-sm);
   font-weight: 600;
 }
-.swatch[aria-pressed="true"] {
+.swatch[aria-checked="true"] {
   border: 2px solid var(--color-violet);
   box-shadow: 0 0 0 3px rgba(138, 92, 255, 0.15);
 }

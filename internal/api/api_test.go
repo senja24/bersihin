@@ -388,7 +388,7 @@ func TestSettingsAndAssistantEndToEnd(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	const key = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz"
-	got, err := svc.Settings.SetApiKey(model.ProviderClaude, &[]string{key}[0])
+	got, err := svc.Settings.SetApiKey(model.ProviderClaude, &[]string{key}[0], "")
 	if err != nil || !got.HasClaudeKey {
 		t.Fatalf("got %+v err %v", got, err)
 	}
@@ -456,7 +456,7 @@ func TestCompatibleProviderEndToEnd(t *testing.T) {
 		t.Fatalf("res %+v", res)
 	}
 	const key = "local-key"
-	if got, err = svc.Settings.SetApiKey(p, &[]string{key}[0]); err != nil || !got.OpenAiCompat.HasKey || got.HasOpenAiKey {
+	if got, err = svc.Settings.SetApiKey(p, &[]string{key}[0], svc.Settings.Get().OpenAiCompat.BaseUrl); err != nil || !got.OpenAiCompat.HasKey || got.HasOpenAiKey {
 		t.Fatalf("got %+v err %v", got, err)
 	}
 	if res, err = svc.Assistant.TestConnection(ctx, p, nil); err != nil || !res.OK || res.Mode != "structured" {

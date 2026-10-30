@@ -30,12 +30,17 @@ export interface AiDisk {
 
 /**
  * AiEndpoint is the saved address and model of a compatible provider. The key
- * is never part of it: only whether one is stored.
+ * is never part of it: only whether one is stored. HasKey is true when the key
+ * can be used for the saved address (KeyState "ok"). KeyHost is the host (and
+ * port, if not the default) the key of KeyState "other-address" was saved
+ * for, or "" when that is not known.
  */
 export interface AiEndpoint {
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  keyState: KeyState;
+  keyHost: string;
 }
 
 /**
@@ -190,6 +195,12 @@ export interface JunkCategory {
   irreversible: boolean;
 }
 
+/**
+ * KeyState says what the Keychain holds for a compatible provider, seen from
+ * the saved address.
+ */
+export type KeyState = "none" | "ok" | "other-address";
+
 /** LargeFile is one file found by the large file scan. */
 export interface LargeFile {
   path: string;
@@ -253,13 +264,22 @@ export interface Settings {
   hasOpenAiKey: boolean;
   claudeCompat: AiEndpoint;
   openAiCompat: AiEndpoint;
+  /**
+   * ClaudeModel and OpenAiModel are the model ids chosen for the official
+   * providers; "" means the default (DefaultClaudeModel, DefaultOpenAiModel).
+   */
+  claudeModel: string;
+  openAiModel: string;
+  defaultClaudeModel: string;
+  defaultOpenAiModel: string;
   background: Background;
   largeFileMinMb: number;
   confirmBeforeClean: boolean;
 }
 
 /**
- * SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey'>>, with the
+ * SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey' |
+ * 'defaultClaudeModel' | 'defaultOpenAiModel'>>, with the
  * compatible endpoints as patches (no hasKey):
  * only the fields that are set change.
  */
@@ -267,6 +287,8 @@ export interface SettingsPatch {
   aiProvider?: AiProvider;
   claudeCompat?: AiEndpointPatch;
   openAiCompat?: AiEndpointPatch;
+  claudeModel?: string;
+  openAiModel?: string;
   background?: Background;
   largeFileMinMb?: number;
   confirmBeforeClean?: boolean;
@@ -516,10 +538,13 @@ export const Settings = {
   },
   /**
    * SetApiKey stores the provider's API key in the Keychain, or removes it when
-   * key is null or empty, and returns the settings.
+   * key is null or empty, and returns the settings. forBaseUrl is the address of
+   * a compatible provider as the page shows it (ignored for Claude and ChatGPT
+   * and when removing): the key is bound to the saved address, so the call is
+   * refused when that is another one. Save the address first, then the key.
    */
-  setApiKey(provider: AiProvider, key: string | null): Promise<Settings> {
-    return call("Settings.SetApiKey", provider, key);
+  setApiKey(provider: AiProvider, key: string | null, forBaseUrl: string): Promise<Settings> {
+    return call("Settings.SetApiKey", provider, key, forBaseUrl);
   },
 } as const;
 
@@ -536,8 +561,8 @@ export const Assistant = {
    * TestConnection sends one tiny request to the provider with its saved API
    * key and reports how it went: ok, or a code and a message that explain what
    * to fix. draft may carry an address and model the user is still editing; its
-   * host must be the saved one (save a new host first), so a stored key never
-   * goes to a host that was not saved. The page never sends or receives a key.
+   * address must be the saved one (save a changed address first), so a stored
+   * key never goes to an address that was not saved. The page never sends or receives a key.
    */
   testConnection(provider: AiProvider, draft: AiEndpointPatch | null): Promise<AiTestResult> {
     return call("Assistant.TestConnection", provider, draft);

@@ -1,7 +1,7 @@
 // Demo backend for a plain browser: an invented Mac and its invented owner.
 // Calls wait a little and long scans report progress, so every loading and
 // result state can be seen without the Go side.
-import { hostChanged, isCompatible, isReady } from "./lib/aiEndpoint";
+import { addressChanged, hostChanged, hostOf, isCompatible, isReady, keyMismatchNotice } from "./lib/aiEndpoint";
 import { checkModel, parseEndpoint } from "./lib/endpointParse";
 import { runEnded } from "./lib/runEnd";
 import { RUN_ID_PATTERN } from "./lib/runId";
@@ -163,7 +163,7 @@ export function createMockApi(): BersihinApi {
   const swept = new Set<string>();
   const binned = new Set<string>();
   let deniedShown = false;
-  let prefs: Settings = { aiProvider: "claude", hasClaudeKey: false, hasOpenAiKey: false, claudeCompat: { baseUrl: "", model: "", hasKey: false }, openAiCompat: { baseUrl: "", model: "", hasKey: false }, background: "mist", largeFileMinMb: 500, confirmBeforeClean: true };
+  let prefs: Settings = { aiProvider: "claude", hasClaudeKey: false, hasOpenAiKey: false, claudeCompat: { baseUrl: "", model: "", hasKey: false, keyState: "none", keyHost: "" }, openAiCompat: { baseUrl: "", model: "", hasKey: false, keyState: "none", keyHost: "" }, claudeModel: "", openAiModel: "", defaultClaudeModel: "claude-opus-5-5", defaultOpenAiModel: "gpt-5", background: "mist", largeFileMinMb: 500, confirmBeforeClean: true };
 
   // Like Go: every scan is remembered by its run id for a while, and a clean, trash or uninstall may only name
   // things that scan returned.
@@ -326,13 +326,28 @@ export function createMockApi(): BersihinApi {
     getSettings: async () => (await pause(100), { ...prefs }),
     setSettings: async (patch) => {
       await pause(150);
-      // Like Go: an address is normalised, and another host (or none) deletes that kind's saved key.
+      // Like Go: an address is normalised, and another origin (scheme, host or port) or none deletes that kind's saved
+      // key; another path alone keeps it (Go moves its binding).
       const merge = (cur: AiEndpoint, p: AiEndpointPatch | undefined): AiEndpoint => {
         if (!p) return cur;
         const next = { ...cur };
         if (p.baseUrl !== undefined) {
           next.baseUrl = p.baseUrl.trim() === "" ? "" : normalizeUrl(p.baseUrl);
-          if (cur.baseUrl && next.baseUrl !== cur.baseUrl && hostChanged(cur.baseUrl, next.baseUrl)) next.hasKey = false;
+          if (cur.baseUrl && next.baseUrl !== cur.baseUrl && hostChanged(cur.baseUrl, next.baseUrl)) {
+            next.hasKey = false;
+            next.keyState = "none";
+          } else if (cur.keyState === "other-address" && next.baseUrl !== cur.baseUrl) {
+            // Like Go: a key bound elsewhere is deleted when the page changes the address
+            next.hasKey = false;
+            next.keyState = "none";
+            next.keyHost = "";
+          }
+          // Demo only: an address with "rebind" in it shows a key that was saved for another host (the file was edited)
+          if (/rebind/.test(next.baseUrl) && next.keyState === "ok") {
+            next.hasKey = false;
+            next.keyState = "other-address";
+            next.keyHost = "gateway.example.com";
+          }
         }
         if (p.model !== undefined) {
           const model = p.model.trim();
@@ -342,15 +357,29 @@ export function createMockApi(): BersihinApi {
         }
         return next;
       };
+      const official = (m: string | undefined, cur: string): string => {
+        if (m === undefined) return cur;
+        const v = m.trim();
+        const bad = v === "" ? "" : checkModel(v);
+        if (bad) throw new Error(bad);
+        return v;
+      };
       const { claudeCompat, openAiCompat, ...rest } = patch;
+      rest.claudeModel = official(rest.claudeModel, prefs.claudeModel);
+      rest.openAiModel = official(rest.openAiModel, prefs.openAiModel);
       prefs = { ...prefs, ...rest, claudeCompat: merge(prefs.claudeCompat, claudeCompat), openAiCompat: merge(prefs.openAiCompat, openAiCompat) };
       return { ...prefs };
     },
-    setApiKey: async (provider, key) => {
+    setApiKey: async (provider, key, forBaseUrl) => {
       await pause(400);
       if (provider === "claude-compatible" || provider === "openai-compatible") {
         const field = provider === "claude-compatible" ? "claudeCompat" : "openAiCompat";
-        prefs = { ...prefs, [field]: { ...prefs[field], hasKey: key !== null } };
+        const saved = prefs[field].baseUrl;
+        // Like Go: the key is bound to the saved address, so the address on screen must be that one (removing needs none).
+        if (key !== null && key.trim() !== "" && addressChanged(saved, forBaseUrl))
+          throw new Error(saved ? `The address on screen is not the saved address (${hostOf(saved)}). Save the address first, then the API key.` : "Save the address first, then the API key.");
+        const has = key !== null && key.trim() !== "";
+        prefs = { ...prefs, [field]: { ...prefs[field], hasKey: has, keyState: has ? "ok" : "none", keyHost: "" } };
       } else {
         prefs = { ...prefs, [provider === "claude" ? "hasClaudeKey" : "hasOpenAiKey"]: key !== null };
       }
@@ -366,10 +395,10 @@ export function createMockApi(): BersihinApi {
       try {
         if (!url.trim()) return fail("bad_url", "Enter the address of your service first.");
         const draftUrl = normalizeUrl(url);
-        if (saved.baseUrl && hostChanged(saved.baseUrl, draftUrl)) return fail("bad_url", "Save the new address first, then test the connection.");
+        if (saved.baseUrl && addressChanged(saved.baseUrl, draftUrl)) return fail("bad_url", "Save the new address first, then test the connection.");
         if (!model.trim()) return fail("no_model", "Enter a model name first.");
+        if (saved.keyState === "other-address") return fail("no_key", keyMismatchNotice(saved));
         if (!saved.hasKey) return fail("no_key", "Add an API key first.");
-        if (/rebind/.test(draftUrl)) return fail("no_key", "The saved API key was not saved for this address. Save the API key again in Settings.");
         const at = new URL(draftUrl);
         const route = `${at.host}${at.pathname}`;
         if (/localhost|openrouter/.test(draftUrl)) return { ok: true, code: "ok", message: "Connected", detail: `200 · ${route}`, mode: "structured", ms: 420 };

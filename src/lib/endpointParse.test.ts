@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { checkModel, parseEndpoint, sameHost, type ParsedEndpoint } from "./endpointParse";
+import { checkModel, parseEndpoint, sameOrigin, type ParsedEndpoint } from "./endpointParse";
 
 const ok = (raw: string): ParsedEndpoint => {
   const r = parseEndpoint(raw);
@@ -92,11 +92,11 @@ describe("parseEndpoint refuses what Go refuses", () => {
   });
 });
 
-describe("sameHost (host plus effective port)", () => {
-  const same = (a: string, b: string) => sameHost(ok(a), ok(b));
+describe("sameOrigin (scheme, host and effective port)", () => {
+  const same = (a: string, b: string) => sameOrigin(ok(a), ok(b));
   test("a scheme change on the same default port is another host", () => {
     expect(same("http://localhost", "https://localhost")).toBe(false);
-    expect(same("http://localhost:11434", "https://localhost:11434")).toBe(true);
+    expect(same("http://localhost:11434", "https://localhost:11434")).toBe(false);
     expect(same("http://localhost:80", "http://localhost")).toBe(true);
   });
   test("an explicit default port equals none", () => {
@@ -123,5 +123,22 @@ describe("checkModel", () => {
     expect(checkModel("a\nb")).toContain("control or invisible");
     expect(checkModel("a​b")).toContain("control or invisible");
     expect(checkModel("a‮b")).toContain("control or invisible");
+  });
+  test("refuses line separators, non-ASCII spaces and Hangul fillers, keeps the plain space", () => {
+    expect(checkModel("my model")).toBe("");
+    for (const bad of ["a\u2028b", "a\u2029b", "a\u00a0b", "a\u2003b", "a\u3000b", "a\u202fb", "a\u3164b", "a\u115fb", "a\u1160b", "a\uffa0b"])
+      expect(checkModel(bad)).toContain("special space");
+  });
+});
+
+describe("binding (the full address a key belongs to)", () => {
+  const bind = (u: string) => ok(u).binding;
+  test("scheme, host, effective port and path, however written", () => {
+    expect(bind("https://API.example.com/v1/")).toBe("https://api.example.com:443/v1");
+    expect(bind("https://api.example.com:443/v1")).toBe("https://api.example.com:443/v1");
+    expect(bind("http://localhost")).toBe("http://localhost:80");
+    expect(bind("http://[::1]:8080/v1")).toBe("http://[::1]:8080/v1");
+    expect(bind("http://localhost:443")).not.toBe(bind("https://localhost"));
+    expect(bind("https://gw.example/v1/a/one")).not.toBe(bind("https://gw.example/v1/a/two"));
   });
 });

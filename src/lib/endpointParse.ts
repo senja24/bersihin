@@ -1,5 +1,5 @@
-// Mirrors internal/endpoint/endpoint.go (Parse, CheckModel, SameHost) closely enough for demo mode and for the page to
-// know, before saving, what Go will do: which addresses it refuses, and whether a change of address is another host.
+// Mirrors internal/endpoint/endpoint.go (Parse, CheckModel, SameOrigin, Binding) closely enough for demo mode and for the page to
+// know, before saving, what Go will do: which addresses it refuses, and whether a change of address is another origin.
 // Go is the authority; if the two ever differ, Go wins and its message is shown.
 
 export const MAX_URL = 2048;
@@ -16,6 +16,8 @@ export type ParsedEndpoint = {
   /** host plus the explicit port only, the way people write it ("openrouter.ai", "localhost:11434") */
   hostPort: string;
   loopback: boolean;
+  /** Go's Binding: scheme, host, effective port and path. A stored key belongs to exactly this. */
+  binding: string;
 };
 export type ParseResult = { ok: true; value: ParsedEndpoint } | { ok: false; error: string };
 
@@ -146,16 +148,20 @@ export function parseEndpoint(raw: string): ParseResult {
       port: explicit || (scheme === "http" ? "80" : "443"),
       hostPort,
       loopback: host.loopback,
+      binding: `${scheme}://${shown}:${explicit || (scheme === "http" ? "80" : "443")}${path.replace(/\/+$/, "")}`,
     },
   };
 }
 
-/** Go's SameHost: the same host and the same effective port (http 80, https 443). */
-export const sameHost = (a: ParsedEndpoint, b: ParsedEndpoint): boolean => a.host === b.host && a.port === b.port;
+/** Go's SameOrigin: the same scheme, host and effective port (http 80, https 443). */
+export const sameOrigin = (a: ParsedEndpoint, b: ParsedEndpoint): boolean => a.scheme === b.scheme && a.host === b.host && a.port === b.port;
 
-/** Go's CheckModel: 1 to 128 characters, no control or invisible formatting characters. Returns the message, or "". */
+/**
+ * Go's CheckModel: 1 to 128 characters, no control or invisible formatting characters, no line or paragraph separators,
+ * no space other than U+0020 and no Hangul filler. Returns the message, or "".
+ */
 export function checkModel(name: string): string {
   if (name === "" || [...name].length > MAX_MODEL) return "The model name must be 1 to 128 characters long.";
-  if (/[\p{Cc}\p{Cf}]/u.test(name)) return "The model name may not contain control or invisible formatting characters.";
+  if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u115F\u1160\u3164\uFFA0]|(?! )\p{Zs}/u.test(name)) return "The model name may not contain control or invisible characters, line separators or special spaces.";
   return "";
 }

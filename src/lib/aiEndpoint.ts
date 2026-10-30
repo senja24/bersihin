@@ -1,4 +1,4 @@
-import { parseEndpoint, sameHost } from "./endpointParse";
+import { parseEndpoint, sameOrigin } from "./endpointParse";
 import type { AiEndpoint, AiProvider, Settings } from "../types";
 
 export type CompatibleProvider = "claude-compatible" | "openai-compatible";
@@ -59,22 +59,47 @@ const authorityOf = (url: string): string => {
 export const previewKey = (provider: AiProvider, prefs: Settings): string => (isCompatible(provider) ? `${provider}@${authorityOf(endpointOf(prefs, provider).baseUrl)}` : provider);
 
 /**
- * Like Go: another host, or the same host on another effective port (http 80, https 443). An address that is not valid counts
- * as another one, since Go does not know what it points at.
+ * Like Go: another origin, which is another scheme, host or effective port (http 80, https 443). An address that is not
+ * valid counts as another one, since Go does not know what it points at.
  */
 export const hostChanged = (saved: string, next: string): boolean => {
   const a = saved.trim();
   const b = next.trim();
   if (a === "" || b === "") return a !== b;
   const [pa, pb] = [parse(a), parse(b)];
-  return !pa || !pb ? a !== b : !sameHost(pa, pb);
+  return !pa || !pb ? a !== b : !sameOrigin(pa, pb);
 };
 
-/** True when saving `next` over `saved` deletes the saved key: the host or port changes, or the address is cleared. */
+/**
+ * Like Go's Binding compare: false when both are the same address (scheme, host, effective port and path), however
+ * they are spelled. The saved key belongs to exactly one such address.
+ */
+export const addressChanged = (saved: string, next: string): boolean => {
+  const a = saved.trim();
+  const b = next.trim();
+  if (a === "" || b === "") return a !== b;
+  const [pa, pb] = [parse(a), parse(b)];
+  return !pa || !pb ? a !== b : pa.binding !== pb.binding;
+};
+
+/** True when saving `next` over `saved` deletes the saved key: the scheme, host or port changes, or the address is cleared. A new path alone keeps it. */
 export function dropsKey(saved: string, next: string): boolean {
   if (saved.trim() === "") return false;
   if (next.trim() === "") return true;
   return parse(next) !== null && hostChanged(saved, next);
+}
+
+/**
+ * Why the stored key is not used for the saved address, naming the hosts ("" when the key is fine or missing).
+ * Go's keyHost is the host the key was saved for.
+ */
+export function keyMismatchNotice(e: AiEndpoint): string {
+  if (e.keyState !== "other-address") return "";
+  const now = hostOf(e.baseUrl);
+  const tail = " If you did not change the address, it was changed outside the app. Replace the key to use it here.";
+  if (e.keyHost === "" || now === "") return `This key was not saved for the saved address.${tail}`;
+  if (e.keyHost === now) return `This key was saved for a different address on ${now} (another path, or http instead of https).${tail}`;
+  return `This key was saved for ${e.keyHost}, but the saved address is on ${now}.${tail}`;
 }
 
 export const formatMs = (ms: number): string => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);

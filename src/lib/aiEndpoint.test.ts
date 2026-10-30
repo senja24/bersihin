@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { dropsKey, formatMs, hostChanged, hostOf, isLoopback, isReady, previewKey, providerLabel, sendTarget } from "./aiEndpoint";
+import { addressChanged, dropsKey, formatMs, hostChanged, hostOf, isLoopback, isReady, keyMismatchNotice, previewKey, providerLabel, sendTarget } from "./aiEndpoint";
 import type { AiEndpoint, Settings } from "../types";
 
-const none: AiEndpoint = { baseUrl: "", model: "", hasKey: false };
+const none: AiEndpoint = { baseUrl: "", model: "", hasKey: false, keyState: "none", keyHost: "" };
 const prefs = (over: Partial<Settings> = {}): Settings => ({
   aiProvider: "claude", hasClaudeKey: false, hasOpenAiKey: false, claudeCompat: none, openAiCompat: none,
-  background: "mist", largeFileMinMb: 500, confirmBeforeClean: true, ...over,
+  claudeModel: "", openAiModel: "", defaultClaudeModel: "claude-x", defaultOpenAiModel: "gpt-x", background: "mist", largeFileMinMb: 500, confirmBeforeClean: true, ...over,
 });
-const ready: AiEndpoint = { baseUrl: "https://openrouter.ai/api/v1", model: "m", hasKey: true };
+const ready: AiEndpoint = { baseUrl: "https://openrouter.ai/api/v1", model: "m", hasKey: true, keyState: "ok", keyHost: "" };
 
 describe("hostOf and isLoopback", () => {
   test("host with port, empty for junk", () => {
@@ -72,7 +72,8 @@ describe("hostChanged and dropsKey", () => {
   test("same host, other scheme: default ports differ, so the key goes", () => {
     expect(hostChanged("http://localhost", "https://localhost")).toBe(true);
     expect(dropsKey("http://localhost", "https://localhost")).toBe(true);
-    expect(dropsKey("http://localhost:11434/v1", "https://localhost:11434/v1")).toBe(false);
+    expect(dropsKey("http://localhost:11434/v1", "https://localhost:11434/v1")).toBe(true);
+    expect(dropsKey("http://localhost:11434/v1", "http://localhost:11434/v2")).toBe(false);
     expect(dropsKey("https://example.com", "https://example.com:443/v1")).toBe(false);
     expect(dropsKey("https://example.com", "https://example.com./v1")).toBe(false);
     expect(dropsKey("http://[::1]:8080", "http://[0:0:0:0:0:0:0:1]:8080/v2")).toBe(false);
@@ -102,5 +103,42 @@ describe("formatMs", () => {
   test("ms under a second, seconds above", () => {
     expect(formatMs(420)).toBe("420 ms");
     expect(formatMs(1540)).toBe("1.5 s");
+  });
+});
+
+describe("addressChanged (the full address a key is bound to)", () => {
+  test("a new path, scheme or port is another address", () => {
+    expect(addressChanged("https://gw.example/v1/a/one", "https://gw.example/v1/a/two")).toBe(true);
+    expect(addressChanged("http://localhost:443", "https://localhost")).toBe(true);
+    expect(addressChanged("https://x.com", "https://x.com:8443")).toBe(true);
+  });
+  test("other spellings of one address are the same", () => {
+    expect(addressChanged("https://X.com:443/v1/", "https://x.com/v1")).toBe(false);
+    expect(addressChanged("", "")).toBe(false);
+    expect(addressChanged("", "https://x.com")).toBe(true);
+    expect(addressChanged("https://x.com", "")).toBe(true);
+  });
+  test("a path change alone keeps the key (Go moves its binding)", () => {
+    expect(dropsKey("https://gw.example/v1/a/one", "https://gw.example/v1/a/two")).toBe(false);
+  });
+});
+
+describe("keyMismatchNotice", () => {
+  const other = (over: Partial<AiEndpoint>): AiEndpoint => ({ ...ready, hasKey: false, keyState: "other-address", ...over });
+  test("empty unless the key belongs to another address", () => {
+    expect(keyMismatchNotice(ready)).toBe("");
+    expect(keyMismatchNotice(none)).toBe("");
+  });
+  test("names both hosts", () => {
+    const n = keyMismatchNotice(other({ keyHost: "api.example.com" }));
+    expect(n).toContain("api.example.com");
+    expect(n).toContain("openrouter.ai");
+    expect(n).toContain("outside the app");
+  });
+  test("same host: another path or scheme", () => {
+    expect(keyMismatchNotice(other({ keyHost: "openrouter.ai" }))).toContain("different address on openrouter.ai");
+  });
+  test("host unknown", () => {
+    expect(keyMismatchNotice(other({ keyHost: "" }))).toContain("not saved for the saved address");
   });
 });
