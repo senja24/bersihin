@@ -74,11 +74,18 @@
   position: absolute;
   width: 240px;
   height: 210px;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: drift 6s ease-in-out infinite;
+}
+/* The blur is painted once on this static child; the parent only moves and fades. */
+.tile-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
   background: var(--tile-glow);
   filter: blur(18px);
-  pointer-events: none;
-  animation: drift 6s ease-in-out infinite;
 }
 @keyframes drift {
   0%, 100% { transform: translate(-18px, 0) scale(1); opacity: 0.85; }
@@ -198,13 +205,15 @@
   width: 30%;
   height: 140%;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
-  transform: skewX(-18deg);
+  transform: translateX(-133.3333%) skewX(-18deg);
   pointer-events: none;
+  will-change: transform;
   animation: shine 4.5s ease-in-out infinite;
 }
+/* A translateX percentage is of the shine's own width, 30% of the tile: -40% of the tile is -133.33% and 130% is 433.33%. */
 @keyframes shine {
-  0% { left: -40%; }
-  55%, 100% { left: 130%; }
+  0% { transform: translateX(-133.3333%) skewX(-18deg); }
+  55%, 100% { transform: translateX(433.3333%) skewX(-18deg); }
 }
 .ember {
   position: absolute;
@@ -215,6 +224,7 @@
   background: #ffd0d8;
   box-shadow: 0 0 10px #ff8aa0;
   pointer-events: none;
+  will-change: transform, opacity;
   animation: ember 3s linear infinite;
 }
 @keyframes ember {
@@ -225,6 +235,7 @@
 .tile.is-calm .ember {
   opacity: 0;
   animation-play-state: paused;
+  will-change: auto;
 }
 .motes {
   height: 34px;
@@ -234,6 +245,7 @@
   position: absolute;
   border-radius: 50%;
   background: #fff;
+  will-change: transform, opacity;
   animation: float-mote 2.6s ease-in-out infinite;
 }
 @keyframes float-mote {
@@ -271,15 +283,19 @@ div.track {
 .track-fill::after {
   content: "";
   position: absolute;
+  left: 0;
   top: 0;
   bottom: 0;
   width: 40%;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(220, 255, 120, 0.9), rgba(255, 255, 255, 0));
+  transform: translateX(-100%);
+  will-change: transform;
   animation: sweep 2.2s ease-in-out infinite;
 }
+/* Percentages are of the sweep's own width, 40% of the track fill: -40% of the fill is -100%, 100% is 250%. */
 @keyframes sweep {
-  from { left: -40%; }
-  to { left: 100%; }
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
 }
 .track-knob {
   position: absolute;
@@ -302,5 +318,6 @@ div.track {
 @media screen and (prefers-reduced-motion: reduce) {
   .tile-glow, .tile-shine, .ember, .motes i, .track-fill::after, .tile-skeleton {
     animation: none;
+    will-change: auto;
   }
 }

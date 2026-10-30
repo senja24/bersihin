@@ -251,4 +251,6 @@ export type BersihinApi = {
   cancelScan: (tasks?: ScanTask[]) => Promise<void>;
   /** Progress events from long scans; returns the unsubscribe function. */
   onProgress: (cb: (p: ScanProgress) => void) => () => void;
+  /** Whether the window has the keyboard focus, as the native side sees it; returns the unsubscribe function. */
+  onWindowFocus: (cb: (focused: boolean) => void) => () => void;
 };

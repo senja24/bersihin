@@ -64,6 +64,7 @@ function createBackendApi(): BersihinApi {
     testConnection: (provider, draft) => rejectAsError(Assistant.testConnection(provider, draft)),
     openExternal: (url) => rejectAsError(System.openExternal(url)),
     onProgress: (cb) => events.progress.on(cb),
+    onWindowFocus: (cb) => events.windowFocus.on(cb),
   };
 }
 

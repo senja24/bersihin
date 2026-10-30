@@ -410,5 +410,6 @@ export function createMockApi(): BersihinApi {
       subscribers.add(cb);
       return () => void subscribers.delete(cb);
     },
+    onWindowFocus: () => () => undefined,
   };
 }
