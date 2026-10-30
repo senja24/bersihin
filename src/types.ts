@@ -147,16 +147,50 @@ export type ProtectionStatus = {
   notes: string[];
 };
 
-export type AiProvider = "claude" | "chatgpt";
+export type AiProvider = "claude" | "chatgpt" | "claude-compatible" | "openai-compatible";
 export type Background = "mist" | "grid" | "dots" | "grain";
+
+/** The saved address and model of a compatible provider. The key never reaches the page: only whether one is stored. */
+export type AiEndpoint = {
+  baseUrl: string;
+  model: string;
+  hasKey: boolean;
+};
+
+/** An empty string clears the field. Changing the host or port of baseUrl, or clearing it, deletes the saved key. */
+export type AiEndpointPatch = {
+  baseUrl?: string;
+  model?: string;
+};
+
+/** A failed test resolves with ok false and a code; detail holds the status and the host and path only. */
+export type AiTestResult = {
+  ok: boolean;
+  code: string;
+  message: string;
+  detail?: string;
+  mode?: string;
+  ms: number;
+};
 
 export type Settings = {
   aiProvider: AiProvider;
   hasClaudeKey: boolean;
   hasOpenAiKey: boolean;
+  claudeCompat: AiEndpoint;
+  openAiCompat: AiEndpoint;
   background: Background;
   largeFileMinMb: number;
   confirmBeforeClean: boolean; // ask before deleting
+};
+
+export type SettingsPatch = {
+  aiProvider?: AiProvider;
+  claudeCompat?: AiEndpointPatch;
+  openAiCompat?: AiEndpointPatch;
+  background?: Background;
+  largeFileMinMb?: number;
+  confirmBeforeClean?: boolean;
 };
 
 /** The only data the assistant is given: names, paths, sizes. No file contents. */
@@ -203,9 +237,12 @@ export type BersihinApi = {
   uninstallApp: (scanId: string, id: string) => Promise<UninstallResult>;
   protection: () => Promise<ProtectionStatus>;
   getSettings: () => Promise<Settings>;
-  setSettings: (patch: Partial<Omit<Settings, "hasClaudeKey" | "hasOpenAiKey">>) => Promise<Settings>;
+  setSettings: (patch: SettingsPatch) => Promise<Settings>;
+  /** The key of a compatible provider is always required, also for localhost. */
   setApiKey: (provider: AiProvider, key: string | null) => Promise<Settings>;
   askAi: (question: string, context: AiContext) => Promise<AiAdvice>;
+  /** Sends one tiny request with the SAVED key (up to 20 s). A draft may differ from the saved address only in its path. */
+  testConnection: (provider: AiProvider, draft: AiEndpointPatch | null) => Promise<AiTestResult>;
   openExternal: (url: string) => Promise<void>;
   /**
    * Stops the in-flight runs of the named tasks, or all of them when none are named. A stopped scan's promise rejects

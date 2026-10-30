@@ -640,7 +640,20 @@
   gap: var(--space-2);
   margin: 0 -28px -24px -8px;
   padding: var(--space-3) var(--space-7) var(--space-2) var(--space-2);
-  background: linear-gradient(180deg, rgba(246, 245, 249, 0), rgba(246, 245, 249, 0.85) 30%);
+  background: rgba(246, 245, 249, 0.98);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+/* a short fade above the bar, so scrolled content melts away instead of being cut off */
+.composer::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 26px;
+  background: linear-gradient(180deg, rgba(246, 245, 249, 0), rgba(246, 245, 249, 0.9) 70%, rgba(246, 245, 249, 0.98));
+  pointer-events: none;
 }
 .suggest-chips {
   display: flex;
@@ -770,4 +783,61 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+/* ---- compatible provider ---- */
+.endpoint {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+.ep-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+.option b.ep-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 18px;
+}
+.ep-field .field {
+  border-radius: var(--radius-pill);
+}
+.inline-confirm.wrap {
+  flex-wrap: wrap;
+}
+.inline-confirm .icon {
+  color: var(--tag-review-fg);
+}
+.form-error {
+  font-size: var(--text-md);
+  color: var(--tag-risk-fg);
+}
+.test-out {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-2-5);
+  font-size: var(--text-md);
+  color: var(--color-ink-soft);
+}
+.test-detail {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs-plus);
+  color: var(--color-ink-muted);
+}
+
+/* two privacy lines as one unit: the icon beside a left-aligned block, the whole unit centered */
+.intro .privacy.two-lines {
+  align-items: flex-start;
+}
+.intro .privacy.two-lines .icon {
+  margin-top: 2px;
+}
+.intro .privacy.two-lines > span {
+  text-align: left;
+  white-space: nowrap;
 }

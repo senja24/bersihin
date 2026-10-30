@@ -28,6 +28,25 @@ export interface AiDisk {
   free: number;
 }
 
+/**
+ * AiEndpoint is the saved address and model of a compatible provider. The key
+ * is never part of it: only whether one is stored.
+ */
+export interface AiEndpoint {
+  baseUrl: string;
+  model: string;
+  hasKey: boolean;
+}
+
+/**
+ * AiEndpointPatch changes the fields that are set. An empty string clears the
+ * field. Changing baseUrl to another host deletes the stored key.
+ */
+export interface AiEndpointPatch {
+  baseUrl?: string;
+  model?: string;
+}
+
 /** AiJunk is a junk category as the assistant sees it. */
 export interface AiJunk {
   name: string;
@@ -43,7 +62,7 @@ export interface AiLargeFile {
 }
 
 /** AiProvider selects the assistant's backend. */
-export type AiProvider = "claude" | "chatgpt";
+export type AiProvider = "claude" | "chatgpt" | "claude-compatible" | "openai-compatible";
 
 /** AiSpace is a space map entry as the assistant sees it. */
 export interface AiSpace {
@@ -56,6 +75,22 @@ export interface AiSuggestion {
   path: string;
   verdict: Verdict;
   reason: string;
+}
+
+/**
+ * AiTestResult is the outcome of Assistant.TestConnection. A failed test is
+ * OK false with a code, not an error. Code is one of: ok, bad_url, no_key,
+ * no_model, dns, refused, tls, timeout, redirect, auth, not_found, model,
+ * rate, server, too_big, not_json, other. Detail holds the status and the host
+ * and path only. Mode is "structured" or "plain" (see the assistant package).
+ */
+export interface AiTestResult {
+  ok: boolean;
+  code: string;
+  message: string;
+  detail?: string;
+  mode?: string;
+  ms: number;
 }
 
 /** Background is the style of the app's backdrop. */
@@ -216,17 +251,22 @@ export interface Settings {
   aiProvider: AiProvider;
   hasClaudeKey: boolean;
   hasOpenAiKey: boolean;
+  claudeCompat: AiEndpoint;
+  openAiCompat: AiEndpoint;
   background: Background;
   largeFileMinMb: number;
   confirmBeforeClean: boolean;
 }
 
 /**
- * SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey'>>:
+ * SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey'>>, with the
+ * compatible endpoints as patches (no hasKey):
  * only the fields that are set change.
  */
 export interface SettingsPatch {
   aiProvider?: AiProvider;
+  claudeCompat?: AiEndpointPatch;
+  openAiCompat?: AiEndpointPatch;
   background?: Background;
   largeFileMinMb?: number;
   confirmBeforeClean?: boolean;
@@ -483,7 +523,7 @@ export const Settings = {
   },
 } as const;
 
-/** Assistant asks Claude or ChatGPT what is safe to remove. */
+/** Assistant asks Claude, ChatGPT or a compatible server what is safe to remove. */
 export const Assistant = {
   /**
    * Ask sends the question and the context (names, paths and sizes, with the
@@ -491,6 +531,16 @@ export const Assistant = {
    */
   ask(question: string, data: AiContext): Promise<AiAdvice> {
     return call("Assistant.Ask", question, data);
+  },
+  /**
+   * TestConnection sends one tiny request to the provider with its saved API
+   * key and reports how it went: ok, or a code and a message that explain what
+   * to fix. draft may carry an address and model the user is still editing; its
+   * host must be the saved one (save a new host first), so a stored key never
+   * goes to a host that was not saved. The page never sends or receives a key.
+   */
+  testConnection(provider: AiProvider, draft: AiEndpointPatch | null): Promise<AiTestResult> {
+    return call("Assistant.TestConnection", provider, draft);
   },
 } as const;
 

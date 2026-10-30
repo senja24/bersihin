@@ -36,6 +36,10 @@ export type ContractChecks = [
   MustBeTrue<Same<Page.ProtectionStatus, Go.ProtectionStatus>>,
   MustBeTrue<Same<Page.Settings, Go.Settings>>,
   MustBeTrue<Same<Page.AiProvider, Go.AiProvider>>,
+  MustBeTrue<Same<Page.AiEndpoint, Go.AiEndpoint>>,
+  MustBeTrue<Same<Page.AiEndpointPatch, Go.AiEndpointPatch>>,
+  MustBeTrue<Same<Page.AiTestResult, Go.AiTestResult>>,
+  MustBeTrue<Same<Page.SettingsPatch, Go.SettingsPatch>>,
   MustBeTrue<Same<Page.AiAdvice, Go.AiAdvice>>,
   MustBeTrue<Same<Page.IconName, Go.IconName>>,
   MustBeTrue<Same<NoPlatform<Page.SystemInfo>, NoPlatform<Go.SystemInfo>>>,
@@ -57,6 +61,7 @@ function createBackendApi(): BersihinApi {
     setSettings: (patch) => rejectAsError(Settings.set(patch)),
     setApiKey: (provider, key) => rejectAsError(Settings.setApiKey(provider, key)),
     askAi: (question, context) => rejectAsError(Assistant.ask(question, context)),
+    testConnection: (provider, draft) => rejectAsError(Assistant.testConnection(provider, draft)),
     openExternal: (url) => rejectAsError(System.openExternal(url)),
     onProgress: (cb) => events.progress.on(cb),
   };

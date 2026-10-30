@@ -1,11 +1,13 @@
 // Demo backend for a plain browser: an invented Mac and its invented owner.
 // Calls wait a little and long scans report progress, so every loading and
 // result state can be seen without the Go side.
+import { hostChanged, isCompatible, isReady } from "./lib/aiEndpoint";
+import { checkModel, parseEndpoint } from "./lib/endpointParse";
 import { runEnded } from "./lib/runEnd";
 import { RUN_ID_PATTERN } from "./lib/runId";
 import { SCAN_TTL_MS } from "./lib/scanMemory";
 import type {
-  AiAdvice, AiContext, BersihinApi, CleanResult, DiskInfo, DuplicateGroup, IconName, InstalledApp, JunkCategory, LargeFile,
+  AiAdvice, AiContext, AiEndpoint, AiEndpointPatch, AiProvider, AiTestResult, BersihinApi, CleanResult, DiskInfo, DuplicateGroup, IconName, InstalledApp, JunkCategory, LargeFile,
   ProtectionStatus, ScanProgress, Settings, SpaceNode, StartupItem, SystemInfo,
 } from "./types";
 
@@ -15,6 +17,12 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 const HOME = "/Users/maya";
 const daysAgo = (d: number) => Date.now() - d * DAY_MS;
+// Same rules and messages as Go's endpoint.Parse, so demo mode refuses what the real app refuses.
+const normalizeUrl = (raw: string): string => {
+  const r = parseEndpoint(raw.trim());
+  if (!r.ok) throw new Error(r.error);
+  return r.value.base;
+};
 const pause = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
 const MACHINE: SystemInfo = { platform: "darwin", arch: "arm64", osVersion: "macOS 15.3", appVersion: "0.1.0", homeDir: HOME };
@@ -155,7 +163,7 @@ export function createMockApi(): BersihinApi {
   const swept = new Set<string>();
   const binned = new Set<string>();
   let deniedShown = false;
-  let prefs: Settings = { aiProvider: "claude", hasClaudeKey: false, hasOpenAiKey: false, background: "mist", largeFileMinMb: 500, confirmBeforeClean: true };
+  let prefs: Settings = { aiProvider: "claude", hasClaudeKey: false, hasOpenAiKey: false, claudeCompat: { baseUrl: "", model: "", hasKey: false }, openAiCompat: { baseUrl: "", model: "", hasKey: false }, background: "mist", largeFileMinMb: 500, confirmBeforeClean: true };
 
   // Like Go: every scan is remembered by its run id for a while, and a clean, trash or uninstall may only name
   // things that scan returned.
@@ -316,20 +324,75 @@ export function createMockApi(): BersihinApi {
     protection: async () => (await pause(900), { ...PROTECTION, notes: [...PROTECTION.notes] }),
 
     getSettings: async () => (await pause(100), { ...prefs }),
-    setSettings: async (patch) => (await pause(150), (prefs = { ...prefs, ...patch }), { ...prefs }),
+    setSettings: async (patch) => {
+      await pause(150);
+      // Like Go: an address is normalised, and another host (or none) deletes that kind's saved key.
+      const merge = (cur: AiEndpoint, p: AiEndpointPatch | undefined): AiEndpoint => {
+        if (!p) return cur;
+        const next = { ...cur };
+        if (p.baseUrl !== undefined) {
+          next.baseUrl = p.baseUrl.trim() === "" ? "" : normalizeUrl(p.baseUrl);
+          if (cur.baseUrl && next.baseUrl !== cur.baseUrl && hostChanged(cur.baseUrl, next.baseUrl)) next.hasKey = false;
+        }
+        if (p.model !== undefined) {
+          const model = p.model.trim();
+          const bad = model === "" ? "" : checkModel(model);
+          if (bad) throw new Error(bad);
+          next.model = model;
+        }
+        return next;
+      };
+      const { claudeCompat, openAiCompat, ...rest } = patch;
+      prefs = { ...prefs, ...rest, claudeCompat: merge(prefs.claudeCompat, claudeCompat), openAiCompat: merge(prefs.openAiCompat, openAiCompat) };
+      return { ...prefs };
+    },
     setApiKey: async (provider, key) => {
       await pause(400);
-      prefs = { ...prefs, [provider === "claude" ? "hasClaudeKey" : "hasOpenAiKey"]: key !== null };
+      if (provider === "claude-compatible" || provider === "openai-compatible") {
+        const field = provider === "claude-compatible" ? "claudeCompat" : "openAiCompat";
+        prefs = { ...prefs, [field]: { ...prefs[field], hasKey: key !== null } };
+      } else {
+        prefs = { ...prefs, [provider === "claude" ? "hasClaudeKey" : "hasOpenAiKey"]: key !== null };
+      }
       return { ...prefs };
+    },
+    testConnection: async (provider: AiProvider, draft: AiEndpointPatch | null): Promise<AiTestResult> => {
+      await pause(600);
+      const saved = provider === "claude-compatible" ? prefs.claudeCompat : provider === "openai-compatible" ? prefs.openAiCompat : null;
+      if (!saved) return { ok: true, code: "ok", message: "Connected", detail: "200 · api.anthropic.com/v1/messages", mode: "structured", ms: 420 };
+      const url = draft?.baseUrl ?? saved.baseUrl;
+      const model = draft?.model ?? saved.model;
+      const fail = (code: string, message: string, detail?: string): AiTestResult => ({ ok: false, code, message, ...(detail ? { detail } : {}), ms: 600 });
+      try {
+        if (!url.trim()) return fail("bad_url", "Enter the address of your service first.");
+        const draftUrl = normalizeUrl(url);
+        if (saved.baseUrl && hostChanged(saved.baseUrl, draftUrl)) return fail("bad_url", "Save the new address first, then test the connection.");
+        if (!model.trim()) return fail("no_model", "Enter a model name first.");
+        if (!saved.hasKey) return fail("no_key", "Add an API key first.");
+        if (/rebind/.test(draftUrl)) return fail("no_key", "The saved API key was not saved for this address. Save the API key again in Settings.");
+        const at = new URL(draftUrl);
+        const route = `${at.host}${at.pathname}`;
+        if (/localhost|openrouter/.test(draftUrl)) return { ok: true, code: "ok", message: "Connected", detail: `200 · ${route}`, mode: "structured", ms: 420 };
+        return fail("not_found", "The service answered, but nothing lives at that address. Check the path, and whether it needs /v1.", `404 · ${route}`);
+      } catch (e) {
+        return fail("bad_url", e instanceof Error ? e.message : "Check the address.");
+      }
     },
     askAi: async (question: string, context: AiContext): Promise<AiAdvice> => {
       await pause(1600);
+      if (isCompatible(prefs.aiProvider) && !isReady(prefs, prefs.aiProvider))
+        throw new Error("Set up your provider in Settings first: add its address, model and key.");
       const stale = [...(context.largeFiles ?? [])].sort((a, b) => a.modified - b.modified);
       const advice: AiAdvice["suggestions"] = stale.slice(0, 2).map((f) => ({
         path: f.path, verdict: "safe", reason: "Big, untouched for a long while, and an installer or disk image you can download again.",
       }));
       if (stale[2]) advice.push({ path: stale[2].path, verdict: "review", reason: "Looks like your own work. Confirm a backup exists before deleting." });
       advice.push({ path: "~/Library/Caches", verdict: "safe", reason: "Apps recreate these. The Cleanup screen removes them safely." });
+      // Like ParseAdvice in Go: "safe" survives only for a junk category or location the assistant was shown.
+      const known = new Set((context.junk ?? []).flatMap((j) => [j.name, ...j.locations]).map((x) => x.toLowerCase()));
+      advice.forEach((a) => {
+        if (a.verdict === "safe" && !known.has(a.path.toLowerCase())) a.verdict = "review";
+      });
       return {
         provider: prefs.aiProvider,
         answer: `Demo reply to "${question}". Your space goes mostly to Developer, Library and Downloads. These are the quickest wins, and nothing is deleted until you approve.`,
