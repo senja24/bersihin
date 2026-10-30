@@ -1,0 +1,306 @@
+/* Gradient feature tiles (Smart Scan, Speed). */
+
+.tile {
+  --tile-bg: linear-gradient(165deg, var(--card-cleanup-from), var(--card-cleanup-to));
+  --tile-glow: radial-gradient(closest-side, rgba(255, 180, 205, 0.95), rgba(255, 70, 120, 0.4) 55%, rgba(255, 70, 120, 0));
+  --tile-shadow: rgba(160, 25, 50, 0.3);
+  --tile-title: #ffd9df;
+  --tile-text: #ffc0cb;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 22px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-card-live);
+  background: var(--tile-bg) padding-box, linear-gradient(150deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.45)) border-box;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 18px 40px var(--tile-shadow);
+  overflow: hidden;
+  overflow: clip;
+  isolation: isolate;
+  color: #fff;
+  transition: transform var(--duration-medium) var(--ease-out), box-shadow var(--duration-medium) var(--ease-out);
+}
+.tile:hover {
+  transform: translateY(-4px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 26px 52px var(--tile-shadow);
+}
+.tile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 45%);
+  pointer-events: none;
+}
+.tile::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 56px;
+  height: 3px;
+  margin-left: -28px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.tile-speed {
+  --tile-bg: linear-gradient(165deg, var(--card-speed-from), var(--card-speed-to));
+  --tile-glow: radial-gradient(closest-side, rgba(230, 255, 190, 0.6), rgba(150, 220, 90, 0.2) 55%, rgba(150, 220, 90, 0));
+  --tile-shadow: rgba(60, 85, 15, 0.3);
+  --tile-title: #efff8a;
+  --tile-text: #d2e87a;
+}
+.tile-protect {
+  --tile-bg: linear-gradient(165deg, var(--card-protection-from), var(--card-protection-to));
+  --tile-glow: radial-gradient(closest-side, rgba(215, 230, 255, 0.85), rgba(150, 170, 255, 0.3) 55%, rgba(150, 170, 255, 0));
+  --tile-shadow: rgba(70, 75, 210, 0.3);
+  --tile-title: #f0f1ff;
+  --tile-text: #e0e2ff;
+}
+.tile-apps {
+  --tile-bg: linear-gradient(165deg, var(--card-apps-from), var(--card-apps-to));
+  --tile-glow: radial-gradient(closest-side, rgba(170, 240, 255, 0.85), rgba(70, 180, 255, 0.35) 55%, rgba(70, 180, 255, 0));
+  --tile-shadow: rgba(15, 90, 140, 0.3);
+  --tile-title: #dff4ff;
+  --tile-text: #c4e8fa;
+}
+.tile.is-tap {
+  cursor: pointer;
+}
+.tile.is-tap:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.tile-glow {
+  position: absolute;
+  width: 240px;
+  height: 210px;
+  border-radius: 50%;
+  background: var(--tile-glow);
+  filter: blur(18px);
+  pointer-events: none;
+  animation: drift 6s ease-in-out infinite;
+}
+@keyframes drift {
+  0%, 100% { transform: translate(-18px, 0) scale(1); opacity: 0.85; }
+  50% { transform: translate(24px, 12px) scale(1.18); opacity: 1; }
+}
+.tile-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+}
+.tile-top b {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tile-title);
+}
+.tile-icon {
+  display: grid;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+.tile-number {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1-5);
+  min-height: 40px;
+  margin-top: var(--space-4);
+}
+.tile-number strong {
+  font-family: var(--font-display);
+  font-size: var(--text-hero);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+.tile-number em {
+  font-size: var(--text-md);
+  font-style: normal;
+  font-weight: 600;
+  color: var(--tile-title);
+}
+.tile-skeleton {
+  display: inline-block;
+  width: 72px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  animation: breathe-fade 1.4s ease-in-out infinite;
+}
+@keyframes breathe-fade {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+.tile-sub {
+  position: relative;
+  overflow: hidden;
+  margin-top: var(--space-1-5);
+  font-size: var(--text-sm-plus);
+  color: var(--tile-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile-foot {
+  position: relative;
+  margin-top: auto;
+  padding-top: var(--space-3-5);
+}
+.tile-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: 34px;
+  padding: 0 var(--space-3-5);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+.tile-pill:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.tile-pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.tile-pill:disabled:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.tile-pill.is-done {
+  border-color: #fff;
+  background: #fff;
+  color: var(--color-ink);
+  cursor: default;
+}
+.tile-pill .icon-line {
+  stroke-width: 1.9;
+}
+.tile-shine {
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 30%;
+  height: 140%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+  transform: skewX(-18deg);
+  pointer-events: none;
+  animation: shine 4.5s ease-in-out infinite;
+}
+@keyframes shine {
+  0% { left: -40%; }
+  55%, 100% { left: 130%; }
+}
+.ember {
+  position: absolute;
+  bottom: -8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ffd0d8;
+  box-shadow: 0 0 10px #ff8aa0;
+  pointer-events: none;
+  animation: ember 3s linear infinite;
+}
+@keyframes ember {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate(12px, -190px) scale(1.1); opacity: 0; }
+}
+.tile.is-calm .ember {
+  opacity: 0;
+  animation-play-state: paused;
+}
+.motes {
+  height: 34px;
+  padding-top: 0;
+}
+.motes i {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  animation: float-mote 2.6s ease-in-out infinite;
+}
+@keyframes float-mote {
+  0%, 100% { transform: translate(0, 0); opacity: 0.35; }
+  50% { transform: translate(6px, -12px); opacity: 0.95; }
+}
+
+/* The sliding track: how many login items are on. */
+.track {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.45), inset 0 -2px 6px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+div.track {
+  cursor: default;
+}
+.track-fill {
+  position: absolute;
+  left: 5px;
+  top: 6px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, #f6ffb0 0%, #fff 60%, rgba(255, 255, 255, 0.6) 100%);
+  box-shadow: 0 0 18px rgba(234, 255, 124, 0.95), 0 0 40px rgba(234, 255, 124, 0.45);
+  overflow: hidden;
+  transition: width 0.9s var(--ease-out);
+}
+.track-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(220, 255, 120, 0.9), rgba(255, 255, 255, 0));
+  animation: sweep 2.2s ease-in-out infinite;
+}
+@keyframes sweep {
+  from { left: -40%; }
+  to { left: 100%; }
+}
+.track-knob {
+  position: absolute;
+  top: 2px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 2px #fff, 0 4px 10px rgba(0, 0, 0, 0.22);
+  transition: left 0.9s var(--ease-out);
+}
+.track.is-loading .track-fill {
+  animation: breathe-fade 1.4s ease-in-out infinite;
+}
+.tile.is-calm .ember {
+  opacity: 0;
+}
+
+@media screen and (prefers-reduced-motion: reduce) {
+  .tile-glow, .tile-shine, .ember, .motes i, .track-fill::after, .tile-skeleton {
+    animation: none;
+  }
+}

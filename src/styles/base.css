@@ -1,0 +1,89 @@
+/* Reset, body defaults and the window title bar. Needs tokens.css first. */
+:root {
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--color-ink);
+  background: var(--color-paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+}
+
+a {
+  color: var(--color-blue);
+}
+
+a:hover {
+  color: var(--color-blue-strong);
+}
+
+::selection {
+  background: var(--color-selection);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+}
+
+/*
+ * The window has a hidden title bar: this strip drags the window and keeps
+ * clear of the traffic lights. MyGo reads --app-region; -webkit-app-region
+ * is the engine's own property, which MyGo also honours where supported.
+ */
+.titlebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  height: var(--titlebar-height);
+  padding: 0 var(--space-5) 0 var(--titlebar-inset-left);
+  user-select: none;
+  -webkit-user-select: none;
+  --app-region: drag;
+  -webkit-app-region: drag;
+}
+
+/* Interactive controls inside a drag region. */
+.no-drag {
+  --app-region: no-drag;
+  -webkit-app-region: no-drag;
+}

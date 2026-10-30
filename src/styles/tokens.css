@@ -1,0 +1,142 @@
+/*
+ * Bersihin design tokens. Values measured from the reference UI's look;
+ * every screen styles itself with these custom properties. Light only.
+ */
+:root {
+  /* ---- colour: text and surfaces ---- */
+  --color-ink: #0f1218;
+  --color-ink-soft: #3c4250;
+  --color-ink-muted: #5b6270;
+  --color-paper: #f2f3f6; /* window background, BackgroundColor in main.go */
+  --color-surface: #ffffff;
+  --color-surface-glass: rgba(255, 255, 255, 0.84);
+  --color-surface-frost: rgba(255, 255, 255, 0.86);
+  --color-surface-hover: rgba(255, 255, 255, 0.6);
+  --color-surface-veil: rgba(255, 255, 255, 0.7);
+  --color-line: #e2e5ea;
+  --color-line-faint: #eef0f3;
+  --color-grid: #e5e7ec;
+  --color-track: #e8eaee;
+  --color-chip: #eef0f6;
+  --color-control-border: #c9ced8;
+  --color-control-off: #d5d9e2;
+  --color-focus-border: #a9b3ff;
+
+  /* ---- colour: accents ---- */
+  --color-blue: #2b4cff;
+  --color-blue-strong: #1a2fb0;
+  --color-violet: #8a5cff;
+  --color-pink: #ff5d8f;
+  --color-amber: #ffb547;
+  --color-mint: #1fbf8f;
+  --color-danger: #d6334f;
+  --color-periwinkle: #6d7bff;
+  --color-lilac: #a77bff;
+  --color-rose: #ff8fc8;
+  --color-selection: rgba(43, 76, 255, 0.18);
+
+  /* ---- colour: status tags (background / text) ---- */
+  --tag-safe-bg: rgba(31, 191, 143, 0.14);
+  --tag-safe-fg: #0f7a5a;
+  --tag-review-bg: rgba(255, 181, 71, 0.18);
+  --tag-review-fg: #9a5a00;
+  --tag-risk-bg: rgba(214, 51, 79, 0.12);
+  --tag-risk-fg: #a3243b;
+  --tag-count-bg: rgba(255, 93, 143, 0.12);
+  --tag-count-fg: #b4235a;
+
+  /* ---- gradients ---- */
+  --gradient-brand: linear-gradient(135deg, var(--color-periwinkle), var(--color-lilac));
+  --gradient-orb: linear-gradient(135deg, var(--color-periwinkle) 0%, var(--color-lilac) 55%, var(--color-rose) 100%);
+  --gradient-success: linear-gradient(135deg, #3fd6a0 0%, #5fc6ff 100%);
+  --gradient-progress: linear-gradient(90deg, var(--color-periwinkle), var(--color-rose));
+  --gradient-disk-used: linear-gradient(90deg, var(--color-blue), var(--color-violet));
+  /* feature cards: top and bottom stops of a 165deg gradient */
+  --card-cleanup-from: #c4253a;
+  --card-cleanup-to: #8f1430;
+  --card-speed-from: #4f6a14;
+  --card-speed-to: #2f420c;
+  --card-protection-from: #6a6ef0;
+  --card-protection-to: #4045c8;
+  --card-apps-from: #1a86c4;
+  --card-apps-to: #0b4f7a;
+
+  /* ---- typography ---- */
+  --font-display: "Unbounded Variable", system-ui, sans-serif;
+  --font-ui: "Onest Variable", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --text-2xs: 10.5px;
+  --text-xs: 11px;
+  --text-xs-plus: 11.5px;
+  --text-sm: 12px;
+  --text-sm-plus: 12.5px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-display: 28px;
+  --text-hero: 40px;
+  --tracking-display: -0.04em;
+  --tracking-tight: -0.02em;
+  --tracking-label: 0.14em;
+  --leading-body: 1.5;
+
+  /* ---- radii ---- */
+  --radius-xs: 6px;
+  --radius-check: 7px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-input: 14px;
+  --radius-lg: 18px;
+  --radius-card-live: 26px;
+  --radius-card: 28px;
+  --radius-pill: 999px;
+
+  /* ---- shadows ---- */
+  --shadow-hairline: 0 1px 2px rgba(15, 18, 24, 0.05);
+  --shadow-raised: 0 1px 2px rgba(15, 18, 24, 0.08), 0 6px 18px rgba(15, 18, 24, 0.06);
+  --shadow-hover: 0 6px 18px rgba(15, 18, 24, 0.08);
+  --shadow-segment: 0 1px 2px rgba(15, 18, 24, 0.08), 0 4px 12px rgba(15, 18, 24, 0.08);
+  --shadow-card: 0 24px 60px rgba(15, 18, 24, 0.06);
+  --shadow-capsule: 0 1px 2px rgba(15, 18, 24, 0.06), 0 10px 30px rgba(91, 95, 224, 0.16);
+  --shadow-capsule-hover: 0 1px 2px rgba(15, 18, 24, 0.06), 0 16px 40px rgba(91, 95, 224, 0.24);
+  --shadow-toast: 0 16px 40px rgba(15, 18, 24, 0.3);
+  --shadow-knob: 0 2px 6px rgba(15, 18, 24, 0.2);
+  --ring-focus: 0 0 0 4px rgba(109, 123, 255, 0.15);
+
+  /* ---- spacing (4px grid, plus the in-between steps the layout uses) ---- */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-4-5: 18px;
+  --space-5: 20px;
+  --space-5-5: 22px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-12: 48px;
+
+  /* ---- layout ---- */
+  --titlebar-height: 44px;
+  --titlebar-inset-left: 92px; /* room for the traffic lights at x 20, y 16 */
+  --sidebar-width: 236px;
+  --control-sm: 32px;
+  --control-md: 40px;
+  --control-lg: 56px;
+
+  /* ---- motion ---- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 0.2s;
+  --duration-quick: 0.25s;
+  --duration-base: 0.3s;
+  --duration-medium: 0.35s;
+  --duration-slow: 0.4s;
+  --duration-enter: 0.7s;
+  --duration-fill: 1s;
+  --duration-fill-slow: 1.2s;
+}
