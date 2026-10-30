@@ -3,7 +3,7 @@ import { defineConfig } from "mygo-cli";
 export default defineConfig({
   name: "Bersihin",
   identifier: "dev.agus.bersihin",
-  version: "0.1.2",
+  version: "0.1.3",
   updates: {
     // Public key only; the secret key stays outside the repository.
     publicKey: "Ql++n7Begzam9lN2yYo2S9jUCEB6FYLW1N+u/kFUdIA=",

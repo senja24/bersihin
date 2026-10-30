@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- Choose the model for Claude and ChatGPT in Settings (leave it empty for the default).
+- API keys for Claude-compatible and OpenAI-compatible services are now tied to the exact address they were saved for, and Settings shows when a key belongs to a different address. Keys saved with an earlier version need to be entered once more.
+- Simpler background picker in Settings.
+
 ## 0.1.2
 
 - Bersihin now updates itself: it checks for new versions in the background, shows what changed, and installs the update when you choose, then restarts.
