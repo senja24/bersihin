@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 
 	"dev.agus.bersihin/internal/api"
 	"dev.agus.bersihin/internal/navguard"
@@ -52,6 +53,27 @@ func main() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
+	// Sparkle-style update window: checks 10 s after launch, then daily.
+	mygo.Use(updater.Plugin)
+	// MyGo's default menu bar plus "Check for Updates..." after About.
+	mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+		{Label: "Bersihin", Submenu: []*mygo.MenuItem{
+			{Role: mygo.RoleAbout},
+			updater.MenuItem(),
+			mygo.Separator(),
+			{Role: mygo.RoleServices},
+			mygo.Separator(),
+			{Role: mygo.RoleHide},
+			{Role: mygo.RoleHideOthers},
+			{Role: mygo.RoleUnhide},
+			mygo.Separator(),
+			{Role: mygo.RoleQuit},
+		}},
+		{Role: mygo.RoleFileMenu},
+		{Role: mygo.RoleEditMenu},
+		{Role: mygo.RoleViewMenu},
+		{Role: mygo.RoleWindowMenu},
+	}))
 	// Light appearance only, whatever the system uses.
 	mygo.Theme.SetSource(mygo.ThemeLight)
 
