@@ -137,8 +137,9 @@ interface Actions {
    * drops the space maps (they are measured again when next shown) and reads the disks again.
    */
   afterChange: () => void;
-  setPref: (patch: PrefPatch) => Promise<void>;
-  setKey: (provider: AiProvider, key: string | null) => Promise<void>;
+  /** resolves with the settings as saved (an address comes back normalised) */
+  setPref: (patch: PrefPatch) => Promise<Settings>;
+  setKey: (provider: AiProvider, key: string | null, forBaseUrl?: string) => Promise<void>;
   notify: (text: string, tone?: Notice["tone"]) => void;
 }
 
@@ -268,10 +269,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const setPref = useCallback(async (patch: PrefPatch) => {
-    send({ kind: "prefs", prefs: await api.setSettings(patch) });
+    const prefs = await api.setSettings(patch);
+    send({ kind: "prefs", prefs });
+    return prefs;
   }, []);
-  const setKey = useCallback(async (provider: AiProvider, key: string | null) => {
-    send({ kind: "prefs", prefs: await api.setApiKey(provider, key) });
+  const setKey = useCallback(async (provider: AiProvider, key: string | null, forBaseUrl = "") => {
+    send({ kind: "prefs", prefs: await api.setApiKey(provider, key, forBaseUrl) });
   }, []);
   const navigate = useCallback((view: View) => send({ kind: "view", view }), []);
   const abort = useCallback((tasks?: ScanTask[]) => void api.cancelScan(tasks), []);

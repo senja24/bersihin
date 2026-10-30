@@ -46,6 +46,8 @@ type stored struct {
 	AiProvider         model.AiProvider `json:"aiProvider"`
 	ClaudeCompat       storedEndpoint   `json:"claudeCompat"`
 	OpenAiCompat       storedEndpoint   `json:"openAiCompat"`
+	ClaudeModel        string           `json:"claudeModel"`
+	OpenAiModel        string           `json:"openAiModel"`
 	Background         model.Background `json:"background"`
 	LargeFileMinMb     int              `json:"largeFileMinMb"`
 	ConfirmBeforeClean bool             `json:"confirmBeforeClean"`
@@ -65,6 +67,19 @@ func (st *stored) compat(p model.AiProvider) *storedEndpoint {
 		return &st.ClaudeCompat
 	}
 	return &st.OpenAiCompat
+}
+
+// sanitizeModel takes a stored model id of an official provider leniently: a
+// bad one becomes "" (the default).
+func sanitizeModel(b json.RawMessage) string {
+	var m string
+	if json.Unmarshal(b, &m) != nil {
+		return ""
+	}
+	if m = strings.TrimSpace(m); endpoint.CheckModel(m) == nil {
+		return m
+	}
+	return ""
 }
 
 // sanitizeEndpoint takes a stored endpoint leniently: an address that no
@@ -106,7 +121,24 @@ type Store struct {
 	keyMu   sync.Mutex
 	mu      sync.Mutex
 	cached  *stored
-	present map[model.AiProvider]bool // what the Keychain said once; kept for the session
+	present map[model.AiProvider]keyInfo // what the Keychain said once; kept for the session
+}
+
+// keyInfo is what is known about a stored key without keeping the key: that
+// there is one and, for a compatible provider, the address it is bound to.
+type keyInfo struct {
+	has     bool
+	decoded bool   // a compatible entry in the current format
+	bound   string // its address binding ("" until the first address is saved)
+}
+
+// infoOf describes a Keychain value.
+func infoOf(p model.AiProvider, v []byte) keyInfo {
+	if p.Compatible() {
+		bk, ok := decodeBound(v)
+		return keyInfo{has: len(v) > 0, decoded: ok, bound: bk.Address}
+	}
+	return keyInfo{has: len(v) > 0}
 }
 
 func keyName(p model.AiProvider) string {
@@ -142,6 +174,8 @@ func sanitize(b []byte) stored {
 	}
 	out.ClaudeCompat = sanitizeEndpoint(raw["claudeCompat"])
 	out.OpenAiCompat = sanitizeEndpoint(raw["openAiCompat"])
+	out.ClaudeModel = sanitizeModel(raw["claudeModel"])
+	out.OpenAiModel = sanitizeModel(raw["openAiModel"])
 	var bg model.Background
 	if json.Unmarshal(raw["background"], &bg) == nil && validBackground(bg) {
 		out.Background = bg
@@ -210,10 +244,10 @@ func writeAtomic(path string, data []byte) error {
 	return nil
 }
 
-// hasKey asks the Keychain once per provider and remembers the answer for the
+// info asks the Keychain once per provider and remembers the answer for the
 // session, also when it was an error: a denied prompt must not come back on
-// every Get. SetKey updates the answer. s.mu must NOT be held.
-func (s *Store) hasKey(p model.AiProvider) bool {
+// every Get. The setters update the answer. s.mu must NOT be held.
+func (s *Store) info(p model.AiProvider) keyInfo {
 	s.mu.Lock()
 	v, ok := s.present[p]
 	s.mu.Unlock()
@@ -221,7 +255,7 @@ func (s *Store) hasKey(p model.AiProvider) bool {
 		return v
 	}
 	if s.Secrets == nil {
-		return false
+		return keyInfo{}
 	}
 	s.keyMu.Lock()
 	defer s.keyMu.Unlock()
@@ -232,19 +266,58 @@ func (s *Store) hasKey(p model.AiProvider) bool {
 		return v
 	}
 	b, err := s.Secrets.Get(keyName(p))
-	has := err == nil && len(b) > 0
-	s.remember(p, has)
-	return has
+	in := keyInfo{}
+	if err == nil {
+		in = infoOf(p, b)
+	}
+	s.remember(p, in)
+	return in
 }
 
-// remember records whether a key is stored. It takes s.mu itself.
-func (s *Store) remember(p model.AiProvider, v bool) {
+func (s *Store) hasKey(p model.AiProvider) bool { return s.info(p).has }
+
+// remember records what is stored. It takes s.mu itself.
+func (s *Store) remember(p model.AiProvider, in keyInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.present == nil {
-		s.present = map[model.AiProvider]bool{}
+		s.present = map[model.AiProvider]keyInfo{}
 	}
-	s.present[p] = v
+	s.present[p] = in
+}
+
+// bindingOf is the key binding of a saved address ("" when none or invalid).
+func bindingOf(base string) string {
+	if e, err := endpoint.Parse(base); err == nil {
+		return e.Binding()
+	}
+	return ""
+}
+
+// hostOfBinding is the host (and non-default port) of a binding, for
+// messages; "" when it is empty or not an address. The binding may come from
+// the Keychain, so it is parsed again and never shown as it is.
+func hostOfBinding(binding string) string {
+	if e, err := endpoint.Parse(binding); err == nil {
+		return e.Display()
+	}
+	return ""
+}
+
+// keyStateOf says whether the stored key can be used for the saved binding.
+func keyStateOf(in keyInfo, saved string) (model.KeyState, string) {
+	switch {
+	case !in.has:
+		return model.KeyNone, ""
+	case in.decoded && in.bound == saved:
+		return model.KeyOK, ""
+	}
+	return model.KeyOtherAddress, hostOfBinding(in.bound)
+}
+
+func (s *Store) endpointView(p model.AiProvider, e storedEndpoint) model.AiEndpoint {
+	state, host := keyStateOf(s.info(p), bindingOf(e.BaseUrl))
+	return model.AiEndpoint{BaseUrl: e.BaseUrl, Model: e.Model, HasKey: state == model.KeyOK, KeyState: state, KeyHost: host}
 }
 
 // view builds the page's settings. s.mu must NOT be held.
@@ -254,9 +327,11 @@ func (s *Store) view() model.Settings {
 	s.mu.Unlock()
 	return model.Settings{
 		AiProvider: st.AiProvider, HasClaudeKey: s.hasKey(model.ProviderClaude), HasOpenAiKey: s.hasKey(model.ProviderChatGPT),
-		ClaudeCompat: model.AiEndpoint{BaseUrl: st.ClaudeCompat.BaseUrl, Model: st.ClaudeCompat.Model, HasKey: s.hasKey(model.ProviderClaudeCompat)},
-		OpenAiCompat: model.AiEndpoint{BaseUrl: st.OpenAiCompat.BaseUrl, Model: st.OpenAiCompat.Model, HasKey: s.hasKey(model.ProviderOpenAICompat)},
-		Background:   st.Background, LargeFileMinMb: st.LargeFileMinMb, ConfirmBeforeClean: st.ConfirmBeforeClean,
+		ClaudeCompat: s.endpointView(model.ProviderClaudeCompat, st.ClaudeCompat),
+		OpenAiCompat: s.endpointView(model.ProviderOpenAICompat, st.OpenAiCompat),
+		ClaudeModel:  st.ClaudeModel, OpenAiModel: st.OpenAiModel,
+		DefaultClaudeModel: config.ClaudeModel, DefaultOpenAiModel: config.OpenAIModel,
+		Background: st.Background, LargeFileMinMb: st.LargeFileMinMb, ConfirmBeforeClean: st.ConfirmBeforeClean,
 	}
 }
 
@@ -272,8 +347,22 @@ func (s *Store) Provider() model.AiProvider {
 	return s.load().AiProvider
 }
 
+// OfficialModel returns the model id chosen for an official provider, or ""
+// for the default (and for any other provider).
+func (s *Store) OfficialModel(p model.AiProvider) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch p {
+	case model.ProviderClaude:
+		return s.load().ClaudeModel
+	case model.ProviderChatGPT:
+		return s.load().OpenAiModel
+	}
+	return ""
+}
+
 // Endpoint returns the saved address and model of a compatible provider
-// (HasKey is not filled). Both are "" when not set or not valid.
+// (the key fields are not filled). Both are "" when not set or not valid.
 func (s *Store) Endpoint(p model.AiProvider) model.AiEndpoint {
 	if !p.Compatible() {
 		return model.AiEndpoint{}
@@ -286,9 +375,11 @@ func (s *Store) Endpoint(p model.AiProvider) model.AiEndpoint {
 }
 
 // Patch validates and applies the fields that are set, and saves the file.
-// When a compatible provider's address moves to another host (or is cleared)
-// its stored key is deleted first, so a key never goes to a host it was not
-// saved for; if the deletion fails nothing is changed.
+// When a compatible provider's address moves to another origin (scheme, host
+// or port) or is cleared, its stored key is deleted first, so a key never goes
+// to an address it was not saved for; if the deletion fails nothing is
+// changed. A change of the path only (same origin) moves the key's binding to
+// the new address, since the page shows that as a safe edit.
 func (s *Store) Patch(p model.SettingsPatch) (model.Settings, error) {
 	s.patchMu.Lock()
 	defer s.patchMu.Unlock()
@@ -301,8 +392,8 @@ func (s *Store) Patch(p model.SettingsPatch) (model.Settings, error) {
 			return model.Settings{}, errors.New("The saved key could not be removed from the Keychain, so the address was not changed.")
 		}
 	}
-	for k, authority := range bind {
-		if err := s.bindKey(k, authority); err != nil {
+	for k, ch := range bind {
+		if err := s.bindKey(k, ch.from, ch.to); err != nil {
 			return model.Settings{}, errors.New("The saved key could not be updated in the Keychain, so the address was not changed.")
 		}
 	}
@@ -313,48 +404,85 @@ func (s *Store) Patch(p model.SettingsPatch) (model.Settings, error) {
 }
 
 // boundKey is what the Keychain holds for a compatible provider: the key and
-// the authority (host:port) it was saved for. A key is only ever sent to that
-// authority, whatever the settings file says. Authority "" is a key saved
-// before any address: it is bound when the first address is saved.
+// the address (endpoint.Binding: scheme, host, port, path) it was saved for. A
+// key is only ever sent to that address, whatever the settings file says.
+// Address "" is a key saved before any address: it is bound when the first
+// address is saved. Entries of format 1 (host and port only, no scheme or
+// path) are not trusted: decodeBound refuses them and the key must be entered
+// again once.
 type boundKey struct {
-	V         int    `json:"v"`
-	Authority string `json:"authority"`
-	Key       string `json:"key"`
+	V       int    `json:"v"`
+	Address string `json:"address"`
+	Key     string `json:"key"`
 }
 
-func encodeBound(authority, key string) []byte {
-	b, _ := json.Marshal(boundKey{V: 1, Authority: authority, Key: key})
+const boundVersion = 2
+
+func encodeBound(address, key string) []byte {
+	b, _ := json.Marshal(boundKey{V: boundVersion, Address: address, Key: key})
 	return b
 }
 
 func decodeBound(b []byte) (boundKey, bool) {
 	var k boundKey
-	if json.Unmarshal(b, &k) != nil || k.V != 1 || k.Key == "" {
+	if json.Unmarshal(b, &k) != nil || k.V != boundVersion || k.Key == "" {
 		return boundKey{}, false
 	}
 	return k, true
 }
 
-// errNotBound is returned when the stored key was not saved for the address
-// it would be sent to.
-var errNotBound = errors.New("The saved API key was not saved for this address. Save the API key again in Settings.")
+// notBoundError explains that the stored key cannot be used for the saved
+// address. It names hosts only (never paths or keys).
+func notBoundError(in keyInfo, saved string) error {
+	const again = " Save the API key again in Settings."
+	bound, now := hostOfBinding(in.bound), hostOfBinding(saved)
+	switch {
+	case !in.decoded:
+		return errors.New("The saved API key is from an older version and is not tied to an address." + again)
+	case saved == "":
+		return errors.New("Enter the address of the server in Settings first.")
+	case in.bound == "":
+		return errors.New("The saved API key was entered before an address was saved." + again)
+	case bound == "":
+		return errors.New("The saved API key was saved for an unknown address." + again)
+	case bound == now:
+		return fmt.Errorf("The saved API key belongs to a different address on %s (another path or http/https than the saved one). If you did not change the address, it was changed outside the app.%s", now, again)
+	}
+	return fmt.Errorf("The saved API key belongs to %s, but the saved address is on %s. If you did not change the address, it was changed outside the app.%s", bound, now, again)
+}
 
-// savedAuthority is the authority of the saved address ("" when none).
-func (s *Store) savedAuthority(p model.AiProvider) string {
+// savedBinding is the key binding of the saved address ("" when none).
+func (s *Store) savedBinding(p model.AiProvider) string {
 	s.mu.Lock()
 	st := s.load()
 	base := st.compat(p).BaseUrl
 	s.mu.Unlock()
-	if e, err := endpoint.Parse(base); err == nil {
-		return e.Authority()
-	}
-	return ""
+	return bindingOf(base)
 }
 
-// bindKey is called when the first address is saved. A key saved before any
-// address becomes bound to it; a key bound to another authority (for example
-// from an address that was dropped as invalid) is deleted.
-func (s *Store) bindKey(p model.AiProvider, authority string) error {
+// putSecret replaces a provider's Keychain item: it deletes the item first and
+// adds a new one, since a plain update would keep an item that another app
+// planted with an open access list. keyMu must be held.
+func (s *Store) putSecret(p model.AiProvider, value []byte) error {
+	name := keyName(p)
+	if err := s.Secrets.Delete(name); err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if err := s.Secrets.Set(name, value); err != nil {
+		s.remember(p, keyInfo{}) // the old item is gone
+		return err
+	}
+	return nil
+}
+
+// bindMove is a key's binding going from one address to another.
+type bindMove struct{ from, to string }
+
+// bindKey is called when the saved address gets a new binding without a new
+// origin: the first address, or a changed path. A key bound to from moves to
+// to; one already bound to to stays; any other key (for example from an
+// address that was dropped as invalid) is deleted.
+func (s *Store) bindKey(p model.AiProvider, from, to string) error {
 	if s.Secrets == nil {
 		return nil
 	}
@@ -362,7 +490,7 @@ func (s *Store) bindKey(p model.AiProvider, authority string) error {
 	defer s.keyMu.Unlock()
 	v, err := s.Secrets.Get(keyName(p))
 	if errors.Is(err, ErrNotFound) {
-		s.remember(p, false)
+		s.remember(p, keyInfo{})
 		return nil
 	}
 	if err != nil {
@@ -370,22 +498,26 @@ func (s *Store) bindKey(p model.AiProvider, authority string) error {
 	}
 	bk, ok := decodeBound(v)
 	switch {
-	case ok && bk.Authority == authority:
+	case ok && bk.Address == to:
 		return nil
-	case ok && bk.Authority == "":
-		return s.Secrets.Set(keyName(p), encodeBound(authority, bk.Key))
+	case ok && bk.Address == from:
+		if err := s.putSecret(p, encodeBound(to, bk.Key)); err != nil {
+			return err
+		}
+		s.remember(p, keyInfo{has: true, decoded: true, bound: to})
+		return nil
 	}
 	if err := s.Secrets.Delete(keyName(p)); err != nil && !errors.Is(err, ErrNotFound) {
 		return err
 	}
-	s.remember(p, false)
+	s.remember(p, keyInfo{})
 	return nil
 }
 
 // dropKey removes a provider's key from the Keychain and from the presence cache.
 func (s *Store) dropKey(p model.AiProvider) error {
 	if s.Secrets == nil {
-		s.remember(p, false)
+		s.remember(p, keyInfo{})
 		return nil
 	}
 	s.keyMu.Lock()
@@ -393,13 +525,23 @@ func (s *Store) dropKey(p model.AiProvider) error {
 	if err := s.Secrets.Delete(keyName(p)); err != nil && !errors.Is(err, ErrNotFound) {
 		return err
 	}
-	s.remember(p, false)
+	s.remember(p, keyInfo{})
 	return nil
 }
 
-// applyEndpoint applies a patch to a stored endpoint and says whether the
-// host (and port) changed from a previously set one.
-func applyEndpoint(cur storedEndpoint, patch *model.AiEndpointPatch) (next storedEndpoint, hostChanged, firstSet bool, err error) {
+// addressChange is what a patch does to the binding of a stored key.
+type addressChange int
+
+const (
+	addressSame   addressChange = iota // nothing to do
+	addressFirst                       // the first address: an unbound key is bound to it
+	addressMoved                       // same scheme, host and port, other path: the key follows
+	addressOrigin                      // other scheme, host or port, or cleared: the key is deleted
+)
+
+// applyEndpoint applies a patch to a stored endpoint and says what it does to
+// the key.
+func applyEndpoint(cur storedEndpoint, patch *model.AiEndpointPatch) (next storedEndpoint, ch addressChange, err error) {
 	next = cur
 	if patch.BaseUrl != nil {
 		raw := strings.TrimSpace(*patch.BaseUrl)
@@ -408,7 +550,7 @@ func applyEndpoint(cur storedEndpoint, patch *model.AiEndpointPatch) (next store
 		} else {
 			e, err := endpoint.Parse(raw)
 			if err != nil {
-				return cur, false, false, err
+				return cur, addressSame, err
 			}
 			next.BaseUrl = e.Base
 		}
@@ -417,24 +559,34 @@ func applyEndpoint(cur storedEndpoint, patch *model.AiEndpointPatch) (next store
 		m := strings.TrimSpace(*patch.Model)
 		if m != "" {
 			if err := endpoint.CheckModel(m); err != nil {
-				return cur, false, false, err
+				return cur, addressSame, err
 			}
 		}
 		next.Model = m
 	}
-	if cur.BaseUrl != "" && next.BaseUrl != cur.BaseUrl {
+	switch {
+	case cur.BaseUrl == next.BaseUrl:
+	case cur.BaseUrl == "":
+		ch = addressFirst
+	case next.BaseUrl == "":
+		ch = addressOrigin
+	default:
 		old, err1 := endpoint.Parse(cur.BaseUrl)
 		now, err2 := endpoint.Parse(next.BaseUrl)
-		hostChanged = err1 != nil || err2 != nil || !old.SameHost(now)
+		switch {
+		case err1 != nil || err2 != nil || !old.SameOrigin(now):
+			ch = addressOrigin
+		case old.Binding() != now.Binding():
+			ch = addressMoved
+		}
 	}
-	firstSet = cur.BaseUrl == "" && next.BaseUrl != ""
-	return next, hostChanged, firstSet, nil
+	return next, ch, nil
 }
 
 // plan validates the patch and returns the next settings, the providers whose
-// key must be deleted (host changed) and those whose key must be bound to a
-// first address. It takes s.mu.
-func (s *Store) plan(p model.SettingsPatch) (next stored, wipe []model.AiProvider, bind map[model.AiProvider]string, err error) {
+// key must be deleted (origin changed) and the keys whose binding must move
+// (first address, changed path). It takes s.mu.
+func (s *Store) plan(p model.SettingsPatch) (next stored, wipe []model.AiProvider, bind map[model.AiProvider]bindMove, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next = s.load()
@@ -452,23 +604,20 @@ func (s *Store) plan(p model.SettingsPatch) (next stored, wipe []model.AiProvide
 			continue
 		}
 		e := next.compat(c.p)
-		ne, changed, first, err := applyEndpoint(*e, c.patch)
+		old := bindingOf(e.BaseUrl)
+		ne, ch, err := applyEndpoint(*e, c.patch)
 		if err != nil {
 			return next, nil, nil, err
 		}
 		*e = ne
-		if changed {
+		switch ch {
+		case addressOrigin:
 			wipe = append(wipe, c.p)
-		}
-		if first {
-			parsed, perr := endpoint.Parse(ne.BaseUrl)
-			if perr != nil {
-				return next, nil, nil, perr
-			}
+		case addressFirst, addressMoved:
 			if bind == nil {
-				bind = map[model.AiProvider]string{}
+				bind = map[model.AiProvider]bindMove{}
 			}
-			bind[c.p] = parsed.Authority()
+			bind[c.p] = bindMove{from: old, to: bindingOf(ne.BaseUrl)}
 		}
 	}
 	err = s.checkPatch(&next, p)
@@ -477,6 +626,21 @@ func (s *Store) plan(p model.SettingsPatch) (next stored, wipe []model.AiProvide
 
 // checkPatch applies the plain preferences of a patch.
 func (s *Store) checkPatch(next *stored, p model.SettingsPatch) error {
+	for _, m := range []struct {
+		patch *string
+		to    *string
+	}{{p.ClaudeModel, &next.ClaudeModel}, {p.OpenAiModel, &next.OpenAiModel}} {
+		if m.patch == nil {
+			continue
+		}
+		v := strings.TrimSpace(*m.patch)
+		if v != "" {
+			if err := endpoint.CheckModel(v); err != nil {
+				return err
+			}
+		}
+		*m.to = v
+	}
 	if p.Background != nil {
 		if !validBackground(*p.Background) {
 			return errors.New("Unknown background style.")
@@ -526,15 +690,19 @@ func providerName(p model.AiProvider) string {
 	return "Claude"
 }
 
-// SetKey stores the API key in the Keychain, or removes it when key is nil or blank.
-func (s *Store) SetKey(p model.AiProvider, key *string) (model.Settings, error) {
-	if err := s.setKey(p, key); err != nil {
+// SetKey stores the API key in the Keychain, or removes it when key is nil or
+// blank. For a compatible provider forBaseUrl is the address the page shows:
+// the key is bound to the saved address, so a save is refused unless that is
+// the very address on screen (save the address first, then the key). Removing
+// a key needs no address.
+func (s *Store) SetKey(p model.AiProvider, key *string, forBaseUrl string) (model.Settings, error) {
+	if err := s.setKey(p, key, forBaseUrl); err != nil {
 		return model.Settings{}, err
 	}
 	return s.view(), nil
 }
 
-func (s *Store) setKey(p model.AiProvider, key *string) error {
+func (s *Store) setKey(p model.AiProvider, key *string, forBaseUrl string) error {
 	if !validProvider(p) {
 		return errors.New("Unknown assistant provider.")
 	}
@@ -549,7 +717,7 @@ func (s *Store) setKey(p model.AiProvider, key *string) error {
 		if err := s.Secrets.Delete(keyName(p)); err != nil && !errors.Is(err, ErrNotFound) {
 			return errors.New("The key could not be removed from the Keychain.")
 		}
-		s.remember(p, false)
+		s.remember(p, keyInfo{})
 		return nil
 	}
 	clean := strings.TrimSpace(*key)
@@ -563,16 +731,33 @@ func (s *Store) setKey(p model.AiProvider, key *string) error {
 		return fmt.Errorf("That does not look like a valid %s API key.", providerName(p))
 	}
 	value := []byte(clean)
+	info := keyInfo{has: true}
 	if p.Compatible() {
-		value = encodeBound(s.savedAuthority(p), clean)
+		saved := s.savedBinding(p)
+		shown := ""
+		if raw := strings.TrimSpace(forBaseUrl); raw != "" {
+			e, err := endpoint.Parse(raw)
+			if err != nil {
+				return err
+			}
+			shown = e.Binding()
+		}
+		if shown != saved {
+			if saved == "" {
+				return errors.New("Save the address first, then the API key.")
+			}
+			return fmt.Errorf("The address on screen is not the saved address (%s). Save the address first, then the API key.", hostOfBinding(saved))
+		}
+		value = encodeBound(saved, clean)
+		info = keyInfo{has: true, decoded: true, bound: saved}
 	}
-	if err := s.Secrets.Set(keyName(p), value); err != nil {
+	if err := s.putSecret(p, value); err != nil {
 		if errors.Is(err, errors.ErrUnsupported) {
 			return errors.New("Secure storage is not available on this system, so the key was not saved.")
 		}
 		return errors.New("The key could not be saved to the Keychain.")
 	}
-	s.remember(p, true)
+	s.remember(p, info)
 	return nil
 }
 
@@ -586,7 +771,7 @@ func isSpace(r rune) bool {
 // address that is saved now.
 func (s *Store) Key(p model.AiProvider) (string, error) {
 	if p.Compatible() {
-		return s.KeyFor(p, s.savedAuthority(p))
+		return s.KeyFor(p, s.savedBinding(p))
 	}
 	if s.Secrets == nil {
 		return "", nil
@@ -595,22 +780,24 @@ func (s *Store) Key(p model.AiProvider) (string, error) {
 	defer s.keyMu.Unlock()
 	v, err := s.Secrets.Get(keyName(p))
 	if errors.Is(err, ErrNotFound) {
-		s.remember(p, false)
+		s.remember(p, keyInfo{})
 		return "", nil
 	}
 	if err != nil {
 		return "", errors.New("The saved API key could not be read from the Keychain. Please add it again in Settings.")
 	}
 	key := strings.TrimSpace(string(v))
-	s.remember(p, key != "")
+	s.remember(p, keyInfo{has: key != ""})
 	return key, nil
 }
 
-// KeyFor returns a compatible provider's key for sending to authority
-// (host:port). It refuses unless the key was saved for exactly that authority
-// and the saved address still has it, so a key never goes to a host it was not
-// saved for, however the settings file or the settings changed meanwhile.
-func (s *Store) KeyFor(p model.AiProvider, authority string) (string, error) {
+// KeyFor returns a compatible provider's key for sending to the address with
+// this binding (endpoint.Binding: scheme, host, port, path). It refuses unless
+// the key was saved for exactly that address and the saved address still is
+// it, so a key never goes to an address it was not saved for, however the
+// settings file or the settings changed meanwhile. The refusal names the
+// hosts involved.
+func (s *Store) KeyFor(p model.AiProvider, binding string) (string, error) {
 	if !p.Compatible() {
 		return s.Key(p)
 	}
@@ -621,16 +808,21 @@ func (s *Store) KeyFor(p model.AiProvider, authority string) (string, error) {
 	defer s.keyMu.Unlock()
 	v, err := s.Secrets.Get(keyName(p))
 	if errors.Is(err, ErrNotFound) {
-		s.remember(p, false)
+		s.remember(p, keyInfo{})
 		return "", nil
 	}
 	if err != nil {
 		return "", errors.New("The saved API key could not be read from the Keychain. Please add it again in Settings.")
 	}
-	s.remember(p, true)
-	bk, ok := decodeBound(v)
-	if !ok || authority == "" || bk.Authority != authority || s.savedAuthority(p) != authority {
-		return "", errNotBound
+	in := infoOf(p, v)
+	s.remember(p, in)
+	saved := s.savedBinding(p)
+	if in.decoded && binding != "" && in.bound == binding && saved == binding {
+		bk, _ := decodeBound(v)
+		return bk.Key, nil
 	}
-	return bk.Key, nil
+	if in.decoded && binding != "" && in.bound == saved {
+		return "", errors.New("The settings changed while the request was prepared. Please try again.")
+	}
+	return "", notBoundError(in, saved)
 }

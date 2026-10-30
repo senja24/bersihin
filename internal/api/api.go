@@ -192,15 +192,16 @@ func newCore(d Deps) *core {
 	}
 	c.settings = &settings.Store{Dir: d.DataDir, Secrets: d.Secrets}
 	c.assistant = &assistant.Service{
-		Home:         d.Home,
-		Provider:     c.settings.Provider,
-		Key:          c.settings.Key,
-		KeyFor:       c.settings.KeyFor,
-		Endpoint:     c.settings.Endpoint,
-		Version:      d.AppVersion,
-		HTTP:         d.HTTP,
-		AnthropicURL: d.AnthropicURL,
-		OpenAIURL:    d.OpenAIURL,
+		Home:          d.Home,
+		Provider:      c.settings.Provider,
+		Key:           c.settings.Key,
+		KeyFor:        c.settings.KeyFor,
+		OfficialModel: c.settings.OfficialModel,
+		Endpoint:      c.settings.Endpoint,
+		Version:       d.AppVersion,
+		HTTP:          d.HTTP,
+		AnthropicURL:  d.AnthropicURL,
+		OpenAIURL:     d.OpenAIURL,
 	}
 	return c
 }

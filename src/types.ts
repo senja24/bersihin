@@ -150,14 +150,26 @@ export type ProtectionStatus = {
 export type AiProvider = "claude" | "chatgpt" | "claude-compatible" | "openai-compatible";
 export type Background = "mist" | "grid" | "dots" | "grain";
 
-/** The saved address and model of a compatible provider. The key never reaches the page: only whether one is stored. */
+/** What the Keychain holds for a compatible provider, seen from the saved address. */
+export type KeyState = "none" | "ok" | "other-address";
+
+/**
+ * The saved address and model of a compatible provider. The key never reaches the page: only whether one is stored.
+ * hasKey is true when it can be used for the saved address (keyState "ok"); keyHost is the host a key of state
+ * "other-address" was saved for, or "" when unknown.
+ */
 export type AiEndpoint = {
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  keyState: KeyState;
+  keyHost: string;
 };
 
-/** An empty string clears the field. Changing the host or port of baseUrl, or clearing it, deletes the saved key. */
+/**
+ * An empty string clears the field. Changing the scheme, host or port of baseUrl, or clearing it, deletes the saved
+ * key; changing only its path moves the key to the new address.
+ */
 export type AiEndpointPatch = {
   baseUrl?: string;
   model?: string;
@@ -179,6 +191,11 @@ export type Settings = {
   hasOpenAiKey: boolean;
   claudeCompat: AiEndpoint;
   openAiCompat: AiEndpoint;
+  /** the model id chosen for Claude and ChatGPT; "" means the default */
+  claudeModel: string;
+  openAiModel: string;
+  defaultClaudeModel: string;
+  defaultOpenAiModel: string;
   background: Background;
   largeFileMinMb: number;
   confirmBeforeClean: boolean; // ask before deleting
@@ -188,6 +205,8 @@ export type SettingsPatch = {
   aiProvider?: AiProvider;
   claudeCompat?: AiEndpointPatch;
   openAiCompat?: AiEndpointPatch;
+  claudeModel?: string;
+  openAiModel?: string;
   background?: Background;
   largeFileMinMb?: number;
   confirmBeforeClean?: boolean;
@@ -238,10 +257,14 @@ export type BersihinApi = {
   protection: () => Promise<ProtectionStatus>;
   getSettings: () => Promise<Settings>;
   setSettings: (patch: SettingsPatch) => Promise<Settings>;
-  /** The key of a compatible provider is always required, also for localhost. */
-  setApiKey: (provider: AiProvider, key: string | null) => Promise<Settings>;
+  /**
+   * The key of a compatible provider is always required, also for localhost. forBaseUrl is the address the page shows
+   * for a compatible provider: the key is bound to the saved address, so Go refuses when it is another one (save the
+   * address first). It is ignored for Claude and ChatGPT and when removing a key.
+   */
+  setApiKey: (provider: AiProvider, key: string | null, forBaseUrl: string) => Promise<Settings>;
   askAi: (question: string, context: AiContext) => Promise<AiAdvice>;
-  /** Sends one tiny request with the SAVED key (up to 20 s). A draft may differ from the saved address only in its path. */
+  /** Sends one tiny request with the SAVED key (up to 20 s). A draft address must be the saved one. */
   testConnection: (provider: AiProvider, draft: AiEndpointPatch | null) => Promise<AiTestResult>;
   openExternal: (url: string) => Promise<void>;
   /**

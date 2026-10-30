@@ -273,12 +273,28 @@ func (p AiProvider) Compatible() bool {
 	return p == ProviderClaudeCompat || p == ProviderOpenAICompat
 }
 
+// KeyState says what the Keychain holds for a compatible provider, seen from
+// the saved address.
+type KeyState string
+
+// The key states.
+const (
+	KeyNone         KeyState = "none"          // no key stored
+	KeyOK           KeyState = "ok"            // a key stored for the saved address
+	KeyOtherAddress KeyState = "other-address" // a key stored, but for another address
+)
+
 // AiEndpoint is the saved address and model of a compatible provider. The key
-// is never part of it: only whether one is stored.
+// is never part of it: only whether one is stored. HasKey is true when the key
+// can be used for the saved address (KeyState "ok"). KeyHost is the host (and
+// port, if not the default) the key of KeyState "other-address" was saved
+// for, or "" when that is not known.
 type AiEndpoint struct {
-	BaseUrl string `json:"baseUrl"`
-	Model   string `json:"model"`
-	HasKey  bool   `json:"hasKey"`
+	BaseUrl  string   `json:"baseUrl"`
+	Model    string   `json:"model"`
+	HasKey   bool     `json:"hasKey"`
+	KeyState KeyState `json:"keyState"`
+	KeyHost  string   `json:"keyHost"`
 }
 
 // AiEndpointPatch changes the fields that are set. An empty string clears the
@@ -316,23 +332,32 @@ const (
 // Settings are the user's preferences. API keys are never part of it: only
 // whether one is stored.
 type Settings struct {
-	AiProvider         AiProvider `json:"aiProvider"`
-	HasClaudeKey       bool       `json:"hasClaudeKey"`
-	HasOpenAiKey       bool       `json:"hasOpenAiKey"`
-	ClaudeCompat       AiEndpoint `json:"claudeCompat"`
-	OpenAiCompat       AiEndpoint `json:"openAiCompat"`
+	AiProvider   AiProvider `json:"aiProvider"`
+	HasClaudeKey bool       `json:"hasClaudeKey"`
+	HasOpenAiKey bool       `json:"hasOpenAiKey"`
+	ClaudeCompat AiEndpoint `json:"claudeCompat"`
+	OpenAiCompat AiEndpoint `json:"openAiCompat"`
+	// ClaudeModel and OpenAiModel are the model ids chosen for the official
+	// providers; "" means the default (DefaultClaudeModel, DefaultOpenAiModel).
+	ClaudeModel        string     `json:"claudeModel"`
+	OpenAiModel        string     `json:"openAiModel"`
+	DefaultClaudeModel string     `json:"defaultClaudeModel"`
+	DefaultOpenAiModel string     `json:"defaultOpenAiModel"`
 	Background         Background `json:"background"`
 	LargeFileMinMb     int        `json:"largeFileMinMb"`
 	ConfirmBeforeClean bool       `json:"confirmBeforeClean"`
 }
 
-// SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey'>>, with the
+// SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey' |
+// 'defaultClaudeModel' | 'defaultOpenAiModel'>>, with the
 // compatible endpoints as patches (no hasKey):
 // only the fields that are set change.
 type SettingsPatch struct {
 	AiProvider         *AiProvider      `json:"aiProvider,omitempty"`
 	ClaudeCompat       *AiEndpointPatch `json:"claudeCompat,omitempty"`
 	OpenAiCompat       *AiEndpointPatch `json:"openAiCompat,omitempty"`
+	ClaudeModel        *string          `json:"claudeModel,omitempty"`
+	OpenAiModel        *string          `json:"openAiModel,omitempty"`
 	Background         *Background      `json:"background,omitempty"`
 	LargeFileMinMb     *int             `json:"largeFileMinMb,omitempty"`
 	ConfirmBeforeClean *bool            `json:"confirmBeforeClean,omitempty"`

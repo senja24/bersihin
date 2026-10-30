@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"net/url"
+	"strings"
 
 	"dev.agus.bersihin/internal/config"
 	"dev.agus.bersihin/internal/endpoint"
@@ -66,6 +67,17 @@ func (t target) claude() bool {
 	return t.provider == model.ProviderClaude || t.provider == model.ProviderClaudeCompat
 }
 
+// officialModel is the model chosen for an official provider, or def. A stored
+// name is checked again: a bad one is ignored.
+func (s *Service) officialModel(p model.AiProvider, def string) string {
+	if s.OfficialModel != nil {
+		if m := strings.TrimSpace(s.OfficialModel(p)); m != "" && endpoint.CheckModel(m) == nil {
+			return m
+		}
+	}
+	return def
+}
+
 // target resolves the destination of provider p. The official providers use
 // the endpoints and models of internal/config. A compatible provider uses ep,
 // which is checked again here: a stored address is never trusted.
@@ -73,9 +85,9 @@ func (s *Service) target(p model.AiProvider, ep model.AiEndpoint, key string) (t
 	t := target{provider: p, headers: map[string]string{}}
 	switch p {
 	case model.ProviderClaude:
-		t.url, t.model = firstNonEmpty(s.AnthropicURL, config.AnthropicURL), config.ClaudeModel
+		t.url, t.model = firstNonEmpty(s.AnthropicURL, config.AnthropicURL), s.officialModel(p, config.ClaudeModel)
 	case model.ProviderChatGPT:
-		t.url, t.model = firstNonEmpty(s.OpenAIURL, config.OpenAIURL), config.OpenAIModel
+		t.url, t.model = firstNonEmpty(s.OpenAIURL, config.OpenAIURL), s.officialModel(p, config.OpenAIModel)
 	case model.ProviderClaudeCompat, model.ProviderOpenAICompat:
 		e, err := endpoint.Parse(ep.BaseUrl)
 		if err != nil {

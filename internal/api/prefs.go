@@ -19,9 +19,12 @@ func (s *Settings) Set(patch model.SettingsPatch) (model.Settings, error) {
 }
 
 // SetApiKey stores the provider's API key in the Keychain, or removes it when
-// key is null or empty, and returns the settings.
-func (s *Settings) SetApiKey(provider model.AiProvider, key *string) (model.Settings, error) {
-	return s.c.settings.SetKey(provider, key)
+// key is null or empty, and returns the settings. forBaseUrl is the address of
+// a compatible provider as the page shows it (ignored for Claude and ChatGPT
+// and when removing): the key is bound to the saved address, so the call is
+// refused when that is another one. Save the address first, then the key.
+func (s *Settings) SetApiKey(provider model.AiProvider, key *string, forBaseUrl string) (model.Settings, error) {
+	return s.c.settings.SetKey(provider, key, forBaseUrl)
 }
 
 // Assistant asks Claude, ChatGPT or a compatible server what is safe to remove.
@@ -36,8 +39,8 @@ func (a *Assistant) Ask(ctx context.Context, question string, data model.AiConte
 // TestConnection sends one tiny request to the provider with its saved API
 // key and reports how it went: ok, or a code and a message that explain what
 // to fix. draft may carry an address and model the user is still editing; its
-// host must be the saved one (save a new host first), so a stored key never
-// goes to a host that was not saved. The page never sends or receives a key.
+// address must be the saved one (save a changed address first), so a stored
+// key never goes to an address that was not saved. The page never sends or receives a key.
 func (a *Assistant) TestConnection(ctx context.Context, provider model.AiProvider, draft *model.AiEndpointPatch) (model.AiTestResult, error) {
 	return a.c.assistant.TestConnection(ctx, provider, draft)
 }

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { BrandMark, Icon } from "../components/Icon";
 import { PageHead, Segmented, Spinner, Switch } from "../components/ui";
-import { PROVIDER_NAMES, dropsKey, formatMs, hostChanged, isCompatible, type CompatibleProvider } from "../lib/aiEndpoint";
+import { PROVIDER_NAMES, addressChanged, dropsKey, formatMs, isCompatible, keyMismatchNotice, type CompatibleProvider } from "../lib/aiEndpoint";
 import { useConfirmGuard } from "../lib/confirmGuard";
 import { messageOf } from "../lib/format";
 import { createStaleGuard } from "../lib/staleGuard";
@@ -96,17 +96,36 @@ function Section({ icon, title, aside, children, wide }: { icon: "layers" | "bro
   );
 }
 
-function KeyEditor({ vendor, connected, label, testable, notice, mismatch, onChanged, onBusy }: { vendor: Vendor; connected: boolean; label?: string; testable?: boolean; notice?: string; mismatch?: boolean; onChanged?: () => void; onBusy?: (busy: boolean) => void }) {
+type KeyEditorProps = {
+  vendor: Vendor;
+  connected: boolean;
+  label?: string;
+  testable?: boolean;
+  notice?: string;
+  mismatch?: boolean;
+  /**
+   * Runs before a key is saved: the address on screen is saved first, so the key binds to it and not to the old one.
+   * It resolves with the saved (normalised) address, which is what Go checks the key against.
+   */
+  prepare?: () => Promise<string>;
+  /** an address change is pending or being saved: the key waits for it */
+  blocked?: boolean;
+  onChanged?: () => void;
+  onBusy?: (busy: boolean) => void;
+};
+
+function KeyEditor({ vendor, connected, label, testable, notice, mismatch, prepare, blocked, onChanged, onBusy }: KeyEditorProps) {
   const { setKey, notify } = useApp();
   const [st, set] = usePatch({ open: false, draft: "", working: false, error: "" });
   const test = useConnectionTest(vendor.id);
   const { name } = vendor;
 
   const commit = async (value: string | null) => {
+    if (blocked) return;
     set({ working: true, error: "" });
     onBusy?.(true);
     try {
-      await setKey(vendor.id, value);
+      await setKey(vendor.id, value, value && prepare ? await prepare() : "");
       notify(value ? `${name} key saved` : `${name} key removed`);
       set({ open: false, draft: "" });
       test.clear();
@@ -166,7 +185,7 @@ function KeyEditor({ vendor, connected, label, testable, notice, mismatch, onCha
               if (e.key === "Escape") set({ open: false });
             }}
           />
-          <button type="button" className="pbtn sm solid" disabled={st.working || !st.draft.trim()} onClick={() => void commit(st.draft.trim())}>
+          <button type="button" className="pbtn sm solid" disabled={st.working || blocked || !st.draft.trim()} onClick={() => void commit(st.draft.trim())}>
             {st.working ? <Spinner light size={14} /> : "Save"}
           </button>
           <button type="button" className="pbtn sm quiet" disabled={st.working} onClick={() => set({ open: false })}>
@@ -240,26 +259,34 @@ function EndpointEditor({ kind, endpoint }: { kind: CompatibleProvider; endpoint
     set({ urlRev: revs.current.url, modelRev: revs.current.model });
   };
 
+  // the address save in flight, so a key save never runs beside it
+  const addressSave = useRef<Promise<void> | null>(null);
+  const savedBase = useRef(endpoint.baseUrl);
+  savedBase.current = endpoint.baseUrl;
   const save = async (field: "baseUrl" | "model", value: string) => {
     set({ saving: field, error: "" });
     let saved = false;
-    try {
-      await setPref(patchOf(kind, { [field]: value }));
-      saved = true;
-      test.clear();
-    } catch (e) {
-      // what was typed stays, with the reason, so it can be fixed
-      set({ error: messageOf(e, "Could not save the setting") });
-    } finally {
-      set({ saving: "", confirm: false });
-    }
+    const run = (async () => {
+      try {
+        await setPref(patchOf(kind, { [field]: value }));
+        saved = true;
+        test.clear();
+      } catch (e) {
+        // what was typed stays, with the reason, so it can be fixed
+        set({ error: messageOf(e, "Could not save the setting") });
+      } finally {
+        set({ saving: "", confirm: false });
+      }
+    })();
+    if (field === "baseUrl") addressSave.current = run;
+    await run;
     if (saved) revert(field === "baseUrl" ? "url" : "model");
   };
   const commitUrl = () => {
     const value = st.url.trim();
     if (st.confirm || st.saving === "baseUrl" || st.keyBusy) return;
     if (value === endpoint.baseUrl) return set({ url: value });
-    if (endpoint.hasKey && dropsKey(endpoint.baseUrl, value)) return set({ confirm: true });
+    if (endpoint.keyState !== "none" && dropsKey(endpoint.baseUrl, value)) return set({ confirm: true });
     void save("baseUrl", value);
   };
   const commitModel = () => {
@@ -272,11 +299,22 @@ function EndpointEditor({ kind, endpoint }: { kind: CompatibleProvider; endpoint
     set({ confirm: false });
     revert("url");
   };
-  const unsavedHost = hostChanged(endpoint.baseUrl, st.url);
-  // The last test says the key cannot be used here: a key is stored, but not for this address (or none is stored).
-  const noKey = test.result?.code === "no_key";
-  const keyMismatch = noKey && endpoint.hasKey;
-  const keyNotice = !noKey ? "" : endpoint.hasKey ? "This key was saved for a different address. Replace it to use it here." : "Add an API key to test the connection.";
+  const unsavedAddress = addressChanged(endpoint.baseUrl, st.url);
+  // A key can be stored but belong to another address (the file was edited outside the app, or an older version saved it):
+  // Go says so with keyState, and the notice names the hosts.
+  const keyMismatch = endpoint.keyState === "other-address";
+  const noKey = test.result?.code === "no_key" && endpoint.keyState === "none";
+  const keyNotice = keyMismatch ? keyMismatchNotice(endpoint) : noKey ? "Add an API key to test the connection." : "";
+  // Saving a key saves the address on screen first (a new address deletes the old key, which the new one replaces).
+  const saveAddressFirst = async (): Promise<string> => {
+    await addressSave.current;
+    const value = st.url.trim();
+    if (!addressChanged(savedBase.current, value)) return savedBase.current;
+    const next = await setPref(patchOf(kind, { baseUrl: value }));
+    test.clear();
+    revert("url");
+    return (kind === "claude-compatible" ? next.claudeCompat : next.openAiCompat).baseUrl;
+  };
 
   return (
     <>
@@ -324,17 +362,17 @@ function EndpointEditor({ kind, endpoint }: { kind: CompatibleProvider; endpoint
           </p>
         )}
       </div>
-      <KeyEditor vendor={{ id: kind, name: PROVIDER_NAMES[kind] }} label="API key" connected={endpoint.hasKey} mismatch={keyMismatch} notice={keyNotice} onChanged={test.clear} onBusy={(keyBusy) => set({ keyBusy })} />
+      <KeyEditor vendor={{ id: kind, name: PROVIDER_NAMES[kind] }} label="API key" connected={endpoint.keyState !== "none"} mismatch={keyMismatch} notice={keyNotice} prepare={saveAddressFirst} blocked={st.confirm || st.saving === "baseUrl"} onChanged={test.clear} onBusy={(keyBusy) => set({ keyBusy })} />
       <div className="option stacked">
         <div className="option-line">
           <div className="row-main">
             <b>Connection</b>
-            <small>{unsavedHost ? "Save the new address to test it" : "Sends one tiny request with your saved key"}</small>
+            <small>{unsavedAddress ? "Save the new address to test it" : "Sends one tiny request with your saved key"}</small>
           </div>
           <TestPill t={test} />
           <button
             type="button" className="pbtn sm"
-            disabled={test.running || st.confirm || st.saving !== "" || unsavedHost}
+            disabled={test.running || st.confirm || st.saving !== "" || unsavedAddress}
             onClick={() => void test.run({ baseUrl: st.url.trim(), model: st.model.trim() })}
           >
             Test connection
@@ -344,6 +382,60 @@ function EndpointEditor({ kind, endpoint }: { kind: CompatibleProvider; endpoint
         <TestNote t={test} keyRow />
       </div>
     </>
+  );
+}
+
+/** The model Claude or ChatGPT answers with. Empty uses the default of the app; saved on blur or Enter, Escape reverts. */
+function OfficialModelEditor({ kind, saved, fallback }: { kind: "claude" | "chatgpt"; saved: string; fallback: string }) {
+  const { setPref } = useApp();
+  const [st, set] = usePatch({ model: saved, rev: 0, saving: false, error: "", failed: "" });
+  // the saved (trimmed) value replaces what was typed whenever it is saved, reverted or changed from elsewhere
+  useEffect(() => {
+    set({ model: saved });
+  }, [saved, st.rev]);
+  const commit = async () => {
+    const value = st.model.trim();
+    if (st.saving) return;
+    if (value === saved) return set({ model: value });
+    if (value === st.failed) return; // the same value was just refused: it is not sent again on every blur
+    set({ saving: true, error: "" });
+    try {
+      await setPref(kind === "claude" ? { claudeModel: value } : { openAiModel: value });
+      set({ rev: st.rev + 1, failed: "" });
+    } catch (e) {
+      // what was typed stays, with the reason, so it can be fixed
+      set({ error: messageOf(e, "Could not save the setting"), failed: value });
+    } finally {
+      set({ saving: false });
+    }
+  };
+  return (
+    <div className="option stacked">
+      <div className="endpoint">
+        <label className="ep-field">
+          <b className="ep-label">
+            Model
+            {st.saving && <Spinner size={14} />}
+          </b>
+          <input
+            className="field" autoComplete="off" spellCheck={false} placeholder={fallback}
+            value={st.model} disabled={st.saving}
+            onChange={(e) => set({ model: e.target.value, failed: "" })}
+            onBlur={() => void commit()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void commit();
+              if (e.key === "Escape") set({ model: saved, error: "", failed: "" });
+            }}
+          />
+          <small>Leave empty to use the default ({fallback}).</small>
+        </label>
+      </div>
+      {st.error && (
+        <p className="form-error" role="alert">
+          {st.error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -360,6 +452,27 @@ function Settings() {
     } finally {
       set({ field: null });
     }
+  };
+  // The card that was picked counts at once; writes go one after the other, the last one wins, and a failed last write
+  // puts the saved choice back.
+  const [picked, setPicked] = useState<Background | null>(null);
+  const writes = useRef({ queue: Promise.resolve(), ticket: 0 });
+  const pickBackground = (background: Background) => {
+    setPicked(background);
+    const mine = ++writes.current.ticket;
+    writes.current.queue = writes.current.queue.then(async () => {
+      set({ field: "background" });
+      try {
+        await setPref({ background });
+      } catch (e) {
+        if (mine === writes.current.ticket) notify(messageOf(e, "Could not save the setting"), "err");
+      } finally {
+        if (mine === writes.current.ticket) {
+          set({ field: null });
+          setPicked(null);
+        }
+      }
+    });
   };
   const busyMark = (field: string) => (saving.field === field ? <Spinner size={16} /> : null);
 
@@ -387,11 +500,28 @@ function Settings() {
                 <small>The scenery behind each screen</small>
               </div>
               {busyMark("background")}
-              <Segmented<Background> label="Background" value={prefs.background} options={WALLPAPERS} onChange={(background) => void persist("background", { background })} />
             </div>
-            <div className="swatches" aria-hidden="true">
+            <div
+              className="swatches" role="radiogroup" aria-label="Background"
+              onKeyDown={(e) => {
+                // arrow keys move the selection, like native radio buttons
+                const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+                if (!step) return;
+                e.preventDefault();
+                // from the card that has focus, not the saved value, which lags behind quick key presses
+                const focused = WALLPAPERS.findIndex((w) => (e.target as HTMLElement).classList.contains(`is-${w.value}`));
+                const at = focused >= 0 ? focused : WALLPAPERS.findIndex((w) => w.value === (picked ?? prefs.background));
+                const next = WALLPAPERS[(at + step + WALLPAPERS.length) % WALLPAPERS.length]!;
+                e.currentTarget.querySelector<HTMLElement>(`.is-${next.value}`)?.focus();
+                pickBackground(next.value);
+              }}
+            >
               {WALLPAPERS.map((w) => (
-                <button type="button" key={w.value} tabIndex={-1} className={`swatch is-${w.value}`} aria-pressed={prefs.background === w.value} onClick={() => void persist("background", { background: w.value })}>
+                <button
+                  type="button" role="radio" key={w.value} className={`swatch is-${w.value}`}
+                  aria-checked={(picked ?? prefs.background) === w.value} tabIndex={(picked ?? prefs.background) === w.value ? 0 : -1}
+                  onClick={() => pickBackground(w.value)}
+                >
                   <span>{w.label}</span>
                 </button>
               ))}
@@ -440,7 +570,16 @@ function Settings() {
           {isCompatible(prefs.aiProvider) ? (
             <EndpointEditor key={prefs.aiProvider} kind={prefs.aiProvider} endpoint={prefs.aiProvider === "claude-compatible" ? prefs.claudeCompat : prefs.openAiCompat} />
           ) : (
-            VENDORS.map((v) => <KeyEditor key={v.id} vendor={v} testable connected={v.id === "claude" ? prefs.hasClaudeKey : prefs.hasOpenAiKey} />)
+            VENDORS.map((v) => (
+              <Fragment key={v.id}>
+                <KeyEditor vendor={v} testable connected={v.id === "claude" ? prefs.hasClaudeKey : prefs.hasOpenAiKey} />
+                <OfficialModelEditor
+                  kind={v.id === "claude" ? "claude" : "chatgpt"}
+                  saved={v.id === "claude" ? prefs.claudeModel : prefs.openAiModel}
+                  fallback={v.id === "claude" ? prefs.defaultClaudeModel : prefs.defaultOpenAiModel}
+                />
+              </Fragment>
+            ))
           )}
           <p className="privacy">
             <Icon name="shield" size={16} />

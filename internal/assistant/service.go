@@ -21,9 +21,13 @@ type Service struct {
 	// Provider returns the chosen backend; Key its API key ("" when none).
 	Provider func() model.AiProvider
 	Key      func(model.AiProvider) (string, error)
-	// KeyFor returns a compatible provider's key for sending to one authority
-	// (host:port) and refuses a key saved for another. When nil, Key is used.
-	KeyFor func(p model.AiProvider, authority string) (string, error)
+	// KeyFor returns a compatible provider's key for sending to one address
+	// (endpoint.Binding: scheme, host, port, path) and refuses a key saved for
+	// another. When nil, Key is used.
+	KeyFor func(p model.AiProvider, binding string) (string, error)
+	// OfficialModel returns the model id chosen for Claude or ChatGPT, "" for
+	// the default of internal/config. May be nil.
+	OfficialModel func(model.AiProvider) string
 	// Endpoint returns the saved address and model of a compatible provider.
 	Endpoint func(model.AiProvider) model.AiEndpoint
 	// Version is the app version, for the User-Agent.
@@ -57,7 +61,7 @@ func (s *Service) keyFor(p model.AiProvider, ep model.AiEndpoint) (string, *call
 			return "", &callError{code: codeBadURL, msg: err.Error()}
 		}
 		if s.KeyFor != nil {
-			key, err := s.KeyFor(p, e.Authority())
+			key, err := s.KeyFor(p, e.Binding())
 			if err != nil {
 				return "", &callError{code: codeNoKey, msg: err.Error()}
 			}
@@ -71,11 +75,12 @@ func (s *Service) keyFor(p model.AiProvider, ep model.AiEndpoint) (string, *call
 	return key, nil
 }
 
-// sameSavedHost reports whether two saved endpoints point at the same host.
-func sameSavedHost(a, b model.AiEndpoint) bool {
+// sameSavedAddress reports whether two saved endpoints have the same full
+// address (scheme, host, port and path): the address a stored key is bound to.
+func sameSavedAddress(a, b model.AiEndpoint) bool {
 	ea, err1 := endpoint.Parse(a.BaseUrl)
 	eb, err2 := endpoint.Parse(b.BaseUrl)
-	return err1 == nil && err2 == nil && ea.SameHost(eb)
+	return err1 == nil && err2 == nil && ea.Binding() == eb.Binding()
 }
 
 // Ask sends the question and the (redacted) context to the chosen provider
@@ -119,9 +124,9 @@ func (s *Service) Ask(ctx context.Context, question string, c model.AiContext) (
 	if ce != nil {
 		return model.AiAdvice{}, askError(provider, ce)
 	}
-	// The key was read after the address: if the address moved to another host
-	// in between, the key may belong to the new one.
-	if provider.Compatible() && !sameSavedHost(ep, s.endpoint(provider)) {
+	// The key was read after the address: if the address changed in between,
+	// the key may belong to the new one.
+	if provider.Compatible() && !sameSavedAddress(ep, s.endpoint(provider)) {
 		return model.AiAdvice{}, errors.New("The settings changed while the question was sent. Please try again.")
 	}
 	r, _, ce := s.exchange(ctx, t, SystemPrompt, user, config.AssistantMaxTokens, config.AssistantTimeout)
@@ -154,8 +159,8 @@ func providerLabel(p model.AiProvider) string {
 }
 
 // TestConnection sends one tiny request to the provider with the SAVED key and
-// reports how it went. A draft address may only differ from the saved one in
-// its path: a stored key is never sent to a host that has not been saved.
+// reports how it went. A draft address must be the saved one: a stored key is
+// never sent to an address that has not been saved.
 // Failures are results (OK false), not errors; only a cancelled context is an
 // error.
 func (s *Service) TestConnection(ctx context.Context, p model.AiProvider, draft *model.AiEndpointPatch) (model.AiTestResult, error) {
@@ -177,7 +182,7 @@ func (s *Service) TestConnection(ctx context.Context, p model.AiProvider, draft 
 			if err != nil {
 				return fail(codeBadURL, err.Error(), "")
 			}
-			if !sameSavedHost(saved, model.AiEndpoint{BaseUrl: de.Base}) {
+			if !sameSavedAddress(saved, model.AiEndpoint{BaseUrl: de.Base}) {
 				return fail(codeBadURL, "The server changed. Save the new address first, then test the connection.", "")
 			}
 			ep.BaseUrl = de.Base
@@ -206,7 +211,7 @@ func (s *Service) TestConnection(ctx context.Context, p model.AiProvider, draft 
 	if ce != nil {
 		return fail(ce.code, ce.msg, "")
 	}
-	if p.Compatible() && !sameSavedHost(ep, s.endpoint(p)) {
+	if p.Compatible() && !sameSavedAddress(ep, s.endpoint(p)) {
 		return fail(codeBadURL, "The settings changed during the test. Try again.", "")
 	}
 

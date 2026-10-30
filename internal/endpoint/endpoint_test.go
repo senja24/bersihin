@@ -142,7 +142,7 @@ func TestJoin(t *testing.T) {
 	}
 }
 
-func TestSameHost(t *testing.T) {
+func TestSameOriginAndBinding(t *testing.T) {
 	a, _ := Parse("https://api.example.com/v1")
 	for in, want := range map[string]bool{
 		"https://API.example.com/other": true,
@@ -150,24 +150,66 @@ func TestSameHost(t *testing.T) {
 		"https://api.example.com:8443":  false,
 		"https://api.example.org/v1":    false,
 		"https://evil.api.example.com":  false,
+		"http://localhost":              false,
 	} {
 		b, err := Parse(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a.SameHost(b) != want {
-			t.Errorf("SameHost(%s) = %v, want %v", in, !want, want)
+		if a.SameOrigin(b) != want {
+			t.Errorf("SameOrigin(%s) = %v, want %v", in, !want, want)
 		}
 	}
 	if got := a.HostPath(); got != "api.example.com/v1" {
 		t.Errorf("HostPath = %q", got)
+	}
+	// the binding holds scheme, host, effective port and path
+	for in, want := range map[string]string{
+		"https://API.example.com/v1/":          "https://api.example.com:443/v1",
+		"https://api.example.com:443/v1":       "https://api.example.com:443/v1",
+		"https://gw.example/v1/acct/gw/openai": "https://gw.example:443/v1/acct/gw/openai",
+		"https://gw.example":                   "https://gw.example:443",
+		"http://localhost:443":                 "http://localhost:443",
+		"https://localhost":                    "https://localhost:443",
+		"http://[::1]:8080/v1":                 "http://[::1]:8080/v1",
+		"http://localhost":                     "http://localhost:80",
+	} {
+		e, err := Parse(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := e.Binding(); got != want {
+			t.Errorf("Binding(%s) = %q, want %q", in, got, want)
+		}
+	}
+	x, _ := Parse("http://localhost:443")
+	y, _ := Parse("https://localhost")
+	if x.Binding() == y.Binding() || x.SameOrigin(y) {
+		t.Error("a scheme change must change the binding")
+	}
+	p1, _ := Parse("https://gw.example/v1/a/one")
+	p2, _ := Parse("https://gw.example/v1/a/two")
+	if p1.Binding() == p2.Binding() || !p1.SameOrigin(p2) {
+		t.Error("a path change must change the binding but not the origin")
+	}
+	for in, want := range map[string]string{
+		"https://api.example.com/v1": "api.example.com", "https://api.example.com:8443": "api.example.com:8443",
+		"http://localhost:11434/v1": "localhost:11434", "https://api.example.com:443": "api.example.com", "http://[::1]:80": "[::1]",
+	} {
+		e, _ := Parse(in)
+		if got := e.Display(); got != want {
+			t.Errorf("Display(%s) = %q, want %q", in, got, want)
+		}
 	}
 }
 
 func TestCheckModel(t *testing.T) {
 	for in, ok := range map[string]bool{
 		"gpt-4o": true, "meta-llama/Llama-3.3-70B-Instruct:free": true, "a": true, strings.Repeat("a", 128): true,
-		"": false, strings.Repeat("a", 129): false, "bad\nname": false, "bad\x00": false, "evil\u202ename": false, "zero\u200bwidth": false, "bom\ufeffname": false, "nbsp name": true,
+		"": false, strings.Repeat("a", 129): false, "bad\nname": false, "bad\x00": false, "evil\u202ename": false, "zero\u200bwidth": false, "bom\ufeffname": false, "plain name": true,
+		"line\u2028sep": false, "para\u2029sep": false, "nb\u00a0sp": false, "em\u2003space": false, "ideo\u3000space": false, "narrow\u202fnb": false,
+		"hangul\u3164filler": false, "hangul\u115ffiller": false, "hangul\u1160filler": false, "half\uffa0filler": false,
+		"tab\there": false, "nel\u0085x": false, "soft\u00adhyphen": false,
 	} {
 		if (CheckModel(in) == nil) != ok {
 			t.Errorf("CheckModel(%q) ok=%v, want %v", in, !ok, ok)

@@ -740,9 +740,9 @@ func TestTestConnectionCodes(t *testing.T) {
 
 func TestTestConnectionDraft(t *testing.T) {
 	const p = model.ProviderOpenAICompat
-	t.Run("same host new path and model use the saved key", func(t *testing.T) {
+	t.Run("the saved address (any spelling) and a new model use the saved key", func(t *testing.T) {
 		rec := newRecorder(t, ok200(openAIReply("pong")))
-		s := compat(p, rec.srv.URL, "old-model", compatKey)
+		s := compat(p, rec.srv.URL+"/openai/v1", "old-model", compatKey)
 		base, mdl := rec.srv.URL+"/openai/v1/", " new-model "
 		res, err := s.TestConnection(context.Background(), p, &model.AiEndpointPatch{BaseUrl: &base, Model: &mdl})
 		if err != nil || !res.OK {
@@ -751,6 +751,15 @@ func TestTestConnectionDraft(t *testing.T) {
 		r := rec.at(0)
 		if r.path != "/openai/v1/chat/completions" || r.body["model"] != "new-model" || r.headers.Get("authorization") != "Bearer "+compatKey {
 			t.Errorf("path %s body %v headers %v", r.path, r.body, r.headers)
+		}
+	})
+	t.Run("another path is refused and gets no key", func(t *testing.T) {
+		rec := newRecorder(t, ok200(openAIReply("pong")))
+		s := compat(p, rec.srv.URL+"/tenant-a/v1", "m", compatKey)
+		base := rec.srv.URL + "/tenant-b/v1"
+		res, err := s.TestConnection(context.Background(), p, &model.AiEndpointPatch{BaseUrl: &base})
+		if err != nil || res.OK || res.Code != codeBadURL || !strings.Contains(res.Message, "Save") || rec.count() != 0 {
+			t.Fatalf("%+v %v requests %d", res, err, rec.count())
 		}
 	})
 	t.Run("a different host is refused and gets no key", func(t *testing.T) {
@@ -987,12 +996,12 @@ func TestKeyForIsUsedForCompatibleKinds(t *testing.T) {
 	rec := newRecorder(t, ok200(openAIReply(goodAdvice)))
 	var asked string
 	s := compat(model.ProviderOpenAICompat, rec.srv.URL+"/v1", "m", compatKey)
-	s.KeyFor = func(p model.AiProvider, authority string) (string, error) {
-		asked = authority
+	s.KeyFor = func(p model.AiProvider, binding string) (string, error) {
+		asked = binding
 		return "", errors.New("The saved API key was not saved for this address. Save the API key again in Settings.")
 	}
 	_, err := s.Ask(context.Background(), "q", model.AiContext{})
-	if err == nil || !strings.Contains(err.Error(), "Save the API key again") || asked != strings.TrimPrefix(rec.srv.URL, "http://") {
+	if err == nil || !strings.Contains(err.Error(), "Save the API key again") || asked != rec.srv.URL+"/v1" {
 		t.Fatalf("err %v asked %q", err, asked)
 	}
 	res, _ := s.TestConnection(context.Background(), model.ProviderOpenAICompat, nil)
@@ -1003,11 +1012,81 @@ func TestKeyForIsUsedForCompatibleKinds(t *testing.T) {
 		t.Fatal("a request was sent with an unbound key")
 	}
 	// a key for the right authority goes through, and only that one is sent
-	s.KeyFor = func(p model.AiProvider, authority string) (string, error) { return "bound-key", nil }
+	s.KeyFor = func(p model.AiProvider, binding string) (string, error) { return "bound-key", nil }
 	if _, err := s.Ask(context.Background(), "q", model.AiContext{}); err != nil {
 		t.Fatal(err)
 	}
 	if rec.at(0).headers.Get("authorization") != "Bearer bound-key" {
 		t.Errorf("headers = %v", rec.at(0).headers)
+	}
+}
+
+// A key bound to one full address (scheme, host, port and path) is never put
+// into a request to another one.
+func TestNoRequestCarriesAKeyBoundToAnotherAddress(t *testing.T) {
+	const p = model.ProviderOpenAICompat
+	rec := newRecorder(t, ok200(openAIReply(goodAdvice)))
+	bound := rec.srv.URL + "/tenant-a/v1"
+	keyFor := func(_ model.AiProvider, binding string) (string, error) {
+		if binding != bound {
+			return "", errors.New("The saved API key belongs to a.example, but the saved address is on b.example. Save the API key again in Settings.")
+		}
+		return compatKey, nil
+	}
+	for _, saved := range []string{rec.srv.URL + "/tenant-b/v1", rec.srv.URL, strings.Replace(rec.srv.URL, "127.0.0.1", "localhost", 1) + "/tenant-a/v1"} {
+		s := compat(p, saved, "m", compatKey)
+		s.KeyFor = keyFor
+		if _, err := s.Ask(context.Background(), "q", model.AiContext{}); err == nil || !strings.Contains(err.Error(), "belongs to a.example") {
+			t.Errorf("%s: Ask err = %v", saved, err)
+		}
+		if res, _ := s.TestConnection(context.Background(), p, nil); res.OK || res.Code != codeNoKey || !strings.Contains(res.Message, "a.example") {
+			t.Errorf("%s: test = %+v", saved, res)
+		}
+	}
+	if rec.count() != 0 {
+		t.Fatalf("%d requests were sent", rec.count())
+	}
+	s := compat(p, bound, "m", compatKey)
+	s.KeyFor = keyFor
+	if _, err := s.Ask(context.Background(), "q", model.AiContext{}); err != nil || rec.count() != 1 {
+		t.Fatalf("bound address: %v, %d requests", err, rec.count())
+	}
+}
+
+func TestOfficialModelChoiceIsUsedByAskAndTest(t *testing.T) {
+	for _, tc := range []struct {
+		p     model.AiProvider
+		reply string
+		def   string
+	}{
+		{model.ProviderClaude, claudeReply(goodAdvice), config.ClaudeModel},
+		{model.ProviderChatGPT, openAIReply(goodAdvice), config.OpenAIModel},
+	} {
+		t.Run(string(tc.p), func(t *testing.T) {
+			rec := newRecorder(t, ok200(tc.reply))
+			s := service(rec.srv.URL, tc.p, claudeKey)
+			choice := ""
+			s.OfficialModel = func(model.AiProvider) string { return choice }
+			run := func() {
+				t.Helper()
+				if _, err := s.Ask(context.Background(), "q", model.AiContext{}); err != nil {
+					t.Fatal(err)
+				}
+				if res, err := s.TestConnection(context.Background(), tc.p, nil); err != nil || !res.OK {
+					t.Fatalf("%+v %v", res, err)
+				}
+			}
+			run() // no choice: the default of internal/config
+			choice = " my-model-1 "
+			run()
+			choice = "bad‮name" // never trusted, even from the settings
+			run()
+			want := []string{tc.def, tc.def, "my-model-1", "my-model-1", tc.def, tc.def}
+			for i, w := range want {
+				if got := rec.at(i).body["model"]; got != w {
+					t.Errorf("request %d: model = %v, want %s", i, got, w)
+				}
+			}
+		})
 	}
 }

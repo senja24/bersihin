@@ -47,6 +47,8 @@ type Endpoint struct {
 	Host string
 	// Port is the explicit port, or the scheme's default.
 	Port string
+	// Path is the escaped path without a trailing slash ("" for none).
+	Path string
 	// Loopback is true for localhost, *.localhost and loopback IPs.
 	Loopback bool
 }
@@ -55,14 +57,35 @@ type Endpoint struct {
 // it was saved with.
 func (e Endpoint) Authority() string { return net.JoinHostPort(e.Host, e.Port) }
 
-// SameHost reports whether o has the same host and port.
-func (e Endpoint) SameHost(o Endpoint) bool { return e.Host == o.Host && e.Port == o.Port }
+// SameOrigin reports whether o has the same scheme, host and port.
+func (e Endpoint) SameOrigin(o Endpoint) bool {
+	return e.Scheme == o.Scheme && e.Host == o.Host && e.Port == o.Port
+}
+
+// Binding is the full address a stored API key is tied to: scheme, host, the
+// effective port and the path, so spellings of one address (default port
+// written or not, trailing slash, letter case of the host) give the same
+// value. Shared gateways separate tenants by path, hence the path is in it.
+func (e Endpoint) Binding() string { return e.Scheme + "://" + e.Authority() + e.Path }
 
 // HostPath is the host and path without scheme, for messages: it never holds
 // credentials, a query or a key.
 func (e Endpoint) HostPath() string {
 	i := strings.Index(e.Base, "://")
 	return e.Base[i+3:]
+}
+
+// Display is the host, with the port when it is not the scheme's default,
+// for messages: it never holds credentials, a path, a query or a key.
+func (e Endpoint) Display() string {
+	h := e.Host
+	if strings.Contains(h, ":") {
+		h = "[" + h + "]"
+	}
+	if (e.Scheme == "https" && e.Port == "443") || (e.Scheme == "http" && e.Port == "80") {
+		return h
+	}
+	return h + ":" + e.Port
 }
 
 // Parse checks raw and returns it normalised. The messages are meant for the
@@ -116,7 +139,7 @@ func Parse(raw string) (Endpoint, error) {
 		}
 	}
 
-	e := Endpoint{Scheme: u.Scheme, Host: host, Port: port, Loopback: loopback}
+	e := Endpoint{Scheme: u.Scheme, Host: host, Port: port, Loopback: loopback, Path: strings.TrimRight(u.EscapedPath(), "/")}
 	if e.Port == "" {
 		e.Port = "443"
 		if u.Scheme == "http" {
@@ -130,7 +153,7 @@ func Parse(raw string) (Endpoint, error) {
 	if port != "" {
 		hostPort += ":" + port
 	}
-	e.Base = u.Scheme + "://" + hostPort + strings.TrimRight(u.EscapedPath(), "/")
+	e.Base = u.Scheme + "://" + hostPort + e.Path
 	return e, nil
 }
 
@@ -210,15 +233,18 @@ func Join(base string, k Kind) string {
 	return base + suffix
 }
 
-// CheckModel validates a model name: 1..128 characters, no control or
-// format (bidi, zero-width) characters.
+// CheckModel validates a model name: 1..128 characters, no control, format
+// (bidi, zero-width), line or paragraph separator characters, no space other
+// than U+0020 (no U+00A0 and the like) and no Hangul filler (U+115F, U+1160,
+// U+3164, U+FFA0), which render as nothing.
 func CheckModel(name string) error {
 	if name == "" || len([]rune(name)) > MaxModel {
 		return errors.New("The model name must be 1 to 128 characters long.")
 	}
 	for _, r := range name {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
-			return errors.New("The model name may not contain control or invisible formatting characters.")
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp) ||
+			(unicode.Is(unicode.Zs, r) && r != ' ') || r == 0x115F || r == 0x1160 || r == 0x3164 || r == 0xFFA0 {
+			return errors.New("The model name may not contain control or invisible characters, line separators or special spaces.")
 		}
 	}
 	return nil
