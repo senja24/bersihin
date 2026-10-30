@@ -4,6 +4,12 @@ A macOS disk cleaner. Smart Scan, cache cleanup, large files, duplicates, startu
 
 macOS only. Apple silicon and Intel.
 
+![Bersihin Smart Scan](docs/images/smart-scan.png)
+
+| Space Map | Cleanup | Protection |
+|---|---|---|
+| ![Space Map](docs/images/space-map.png) | ![Cleanup](docs/images/cleanup.png) | ![Protection](docs/images/protection.png) |
+
 ## What it scans
 
 Everything is read-only until you confirm an action.
