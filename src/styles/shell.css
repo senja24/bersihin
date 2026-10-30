@@ -275,6 +275,11 @@
   padding: 0 var(--space-7) var(--space-6) var(--space-2);
   overflow-y: auto;
 }
+/* the chat scrolls under the top edge: soften it so a bubble is not cut by a hard 1px line */
+.main:has(> .assistant) {
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 12px);
+  mask-image: linear-gradient(180deg, transparent, #000 12px);
+}
 .screen {
   display: flex;
   flex-direction: column;

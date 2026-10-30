@@ -6,7 +6,7 @@ import { applyProgress, dropRun, dropTask, pick, type Slots } from "./lib/live";
 import { onRunEnd } from "./lib/runEnd";
 import { newRunId } from "./lib/runId";
 import { runSweep } from "./lib/sweep";
-import type { AiProvider, CleanResult, DiskInfo, JunkCategory, ScanProgress, ScanTask, Settings, SpaceNode, SystemInfo } from "./types";
+import type { AiProvider, CleanResult, DiskInfo, JunkCategory, ScanProgress, ScanTask, Settings, SettingsPatch, SpaceNode, SystemInfo } from "./types";
 
 export type View =
   | "smart-scan" | "cleanup" | "protection" | "speed" | "applications"
@@ -18,7 +18,7 @@ export interface Notice {
   tone: "ok" | "err";
 }
 
-type PrefPatch = Partial<Omit<Settings, "hasClaudeKey" | "hasOpenAiKey">>;
+type PrefPatch = SettingsPatch;
 type Activity = "idle" | "scanning" | "cleaning";
 
 interface Model {

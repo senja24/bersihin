@@ -261,9 +261,46 @@ type AiProvider string
 
 // The assistant backends.
 const (
-	ProviderClaude  AiProvider = "claude"
-	ProviderChatGPT AiProvider = "chatgpt"
+	ProviderClaude       AiProvider = "claude"
+	ProviderChatGPT      AiProvider = "chatgpt"
+	ProviderClaudeCompat AiProvider = "claude-compatible"
+	ProviderOpenAICompat AiProvider = "openai-compatible"
 )
+
+// Compatible reports whether the provider is a user-entered endpoint that
+// speaks the Claude or OpenAI wire format, as opposed to the official API.
+func (p AiProvider) Compatible() bool {
+	return p == ProviderClaudeCompat || p == ProviderOpenAICompat
+}
+
+// AiEndpoint is the saved address and model of a compatible provider. The key
+// is never part of it: only whether one is stored.
+type AiEndpoint struct {
+	BaseUrl string `json:"baseUrl"`
+	Model   string `json:"model"`
+	HasKey  bool   `json:"hasKey"`
+}
+
+// AiEndpointPatch changes the fields that are set. An empty string clears the
+// field. Changing baseUrl to another host deletes the stored key.
+type AiEndpointPatch struct {
+	BaseUrl *string `json:"baseUrl,omitempty"`
+	Model   *string `json:"model,omitempty"`
+}
+
+// AiTestResult is the outcome of Assistant.TestConnection. A failed test is
+// OK false with a code, not an error. Code is one of: ok, bad_url, no_key,
+// no_model, dns, refused, tls, timeout, redirect, auth, not_found, model,
+// rate, server, too_big, not_json, other. Detail holds the status and the host
+// and path only. Mode is "structured" or "plain" (see the assistant package).
+type AiTestResult struct {
+	OK      bool   `json:"ok"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Detail  string `json:"detail,omitempty"`
+	Mode    string `json:"mode,omitempty"`
+	Ms      int64  `json:"ms"`
+}
 
 // Background is the style of the app's backdrop.
 type Background string
@@ -282,18 +319,23 @@ type Settings struct {
 	AiProvider         AiProvider `json:"aiProvider"`
 	HasClaudeKey       bool       `json:"hasClaudeKey"`
 	HasOpenAiKey       bool       `json:"hasOpenAiKey"`
+	ClaudeCompat       AiEndpoint `json:"claudeCompat"`
+	OpenAiCompat       AiEndpoint `json:"openAiCompat"`
 	Background         Background `json:"background"`
 	LargeFileMinMb     int        `json:"largeFileMinMb"`
 	ConfirmBeforeClean bool       `json:"confirmBeforeClean"`
 }
 
-// SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey'>>:
+// SettingsPatch is Partial<Omit<Settings, 'hasClaudeKey' | 'hasOpenAiKey'>>, with the
+// compatible endpoints as patches (no hasKey):
 // only the fields that are set change.
 type SettingsPatch struct {
-	AiProvider         *AiProvider `json:"aiProvider,omitempty"`
-	Background         *Background `json:"background,omitempty"`
-	LargeFileMinMb     *int        `json:"largeFileMinMb,omitempty"`
-	ConfirmBeforeClean *bool       `json:"confirmBeforeClean,omitempty"`
+	AiProvider         *AiProvider      `json:"aiProvider,omitempty"`
+	ClaudeCompat       *AiEndpointPatch `json:"claudeCompat,omitempty"`
+	OpenAiCompat       *AiEndpointPatch `json:"openAiCompat,omitempty"`
+	Background         *Background      `json:"background,omitempty"`
+	LargeFileMinMb     *int             `json:"largeFileMinMb,omitempty"`
+	ConfirmBeforeClean *bool            `json:"confirmBeforeClean,omitempty"`
 }
 
 // AiJunk is a junk category as the assistant sees it.

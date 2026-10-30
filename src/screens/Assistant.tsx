@@ -2,6 +2,7 @@ import { useEffect, useRef, type KeyboardEvent } from "react";
 import { api } from "../api";
 import { Icon } from "../components/Icon";
 import { PageHead, Segmented, Spinner } from "../components/ui";
+import { PROVIDER_NAMES, isCompatible, isReady, previewKey, providerLabel, sendTarget, type CompatibleProvider } from "../lib/aiEndpoint";
 import { createAiGate, type Pending } from "../lib/aiGate";
 import { mergeOriginals, shortenContext } from "../lib/aiPreview";
 import { formatBytes, formatDate, leafName, messageOf, tildePath } from "../lib/format";
@@ -13,25 +14,56 @@ import "./system.css";
 
 type Turn =
   | { id: number; from: "me"; text: string }
-  | { id: number; from: "ai"; advice: AiAdvice }
+  | { id: number; from: "ai"; advice: AiAdvice; by: string }
   | { id: number; from: "error"; text: string };
 type Draft = Turn extends infer T ? (T extends { id: number } ? Omit<T, "id"> : never) : never;
 type Verdict = AiAdvice["suggestions"][number]["verdict"];
 
-const VENDOR: Record<AiProvider, { label: string; keyPage: string; hint: string }> = {
-  claude: { label: "Claude", keyPage: "https://console.anthropic.com/settings/keys", hint: "sk-ant-..." },
-  chatgpt: { label: "ChatGPT", keyPage: "https://platform.openai.com/api-keys", hint: "sk-..." },
+const OFFICIAL = {
+  claude: { keyPage: "https://console.anthropic.com/settings/keys", hint: "sk-ant-..." },
+  chatgpt: { keyPage: "https://platform.openai.com/api-keys", hint: "sk-..." },
 };
+const SWITCH: { value: AiProvider; label: string }[] = [
+  { value: "claude", label: "Claude" },
+  { value: "chatgpt", label: "ChatGPT" },
+  { value: "claude-compatible", label: PROVIDER_NAMES["claude-compatible"] },
+  { value: "openai-compatible", label: PROVIDER_NAMES["openai-compatible"] },
+];
 const STARTERS = ["What can I safely delete?", "Why is my disk so full?", "Which large files haven't I used in a year?"];
 const PRIVACY_NOTE = "Only names, paths and sizes are shared — file contents never are.";
+const COMPAT_NOTE = "Your questions go to the address you entered, not to Anthropic or OpenAI.";
 const BIG_FILE_FLOOR = 500 * 1024 * 1024;
 const VERDICT_LABEL: Record<Verdict, string> = { safe: "Safe to remove", review: "Review first", keep: "Keep" };
 const bare = (p: string) => p.replace(/\/+$/, "");
 
-function ConnectCard({ provider }: { provider: AiProvider }) {
+function SetupCard({ provider }: { provider: CompatibleProvider }) {
+  const { navigate } = useApp();
+  const name = PROVIDER_NAMES[provider];
+  return (
+    <section className="glass setup rise">
+      <span className="orb orb-sm square">
+        <Icon name="lock" />
+      </span>
+      <h3>Set up {name}</h3>
+      <p>Add the address, model and API key of your service in Settings, then come back to ask your first question.</p>
+      <div className="setup-foot">
+        <button type="button" className="pbtn solid" onClick={() => navigate("settings")}>
+          <Icon name="arrow" size={16} />
+          Open Settings
+        </button>
+        <span className="privacy">
+          <Icon name="shield" size={16} />
+          {COMPAT_NOTE}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function ConnectCard({ provider }: { provider: "claude" | "chatgpt" }) {
   const { setKey, notify } = useApp();
   const [f, set] = usePatch({ draft: "", saving: false });
-  const vendor = VENDOR[provider];
+  const vendor = { label: PROVIDER_NAMES[provider], ...OFFICIAL[provider] };
 
   const store = async () => {
     const value = f.draft.trim();
@@ -132,6 +164,7 @@ function Suggestion(p: SuggestionProps) {
 
 interface PreviewProps {
   vendor: string;
+  compatible: boolean;
   question: string;
   context: AiContext;
   onCancel: () => void;
@@ -139,14 +172,14 @@ interface PreviewProps {
 }
 
 /** Shows exactly what the first question of a conversation will send. */
-function SendPreview({ vendor, question, context, onCancel, onSend }: PreviewProps) {
+function SendPreview({ vendor, compatible, question, context, onCancel, onSend }: PreviewProps) {
   const junk = context.junk ?? [];
   const spaces = context.spaces ?? [];
   const files = context.largeFiles ?? [];
   return (
     <section className="glass send-preview rise" aria-label={`Data sent to ${vendor}`}>
       <h3>Send this to {vendor}?</h3>
-      <p>{PRIVACY_NOTE} This is everything that goes out with your question, and you are asked once per conversation.</p>
+      <p>{compatible ? `${COMPAT_NOTE} ` : ""}{PRIVACY_NOTE} This is everything that goes out with your question, and you are asked once per conversation.</p>
       <div className="send-preview-body">
         <b>Your question</b>
         <div className="send-preview-q">{question}</div>
@@ -206,8 +239,11 @@ function Assistant() {
   const counter = useRef(1);
 
   const vendorId = prefs?.aiProvider ?? "claude";
-  const vendor = VENDOR[vendorId];
-  const keyed = prefs ? (vendorId === "claude" ? prefs.hasClaudeKey : prefs.hasOpenAiKey) : false;
+  const compatible = isCompatible(vendorId);
+  const keyed = prefs ? isReady(prefs, vendorId) : false;
+  const label = prefs ? providerLabel(vendorId, prefs) : PROVIDER_NAMES[vendorId];
+  // What a preview approval is remembered for: the provider, and for a compatible one also its host.
+  const approvalKey = prefs ? previewKey(vendorId, prefs) : vendorId;
   const home = machine?.homeDir ?? "";
 
   useEffect(() => {
@@ -256,7 +292,7 @@ function Assistant() {
     const question = raw.trim();
     if (!question || chat.thinking || chat.pending) return;
     if (!keyed) {
-      notify(`Add your ${vendor.label} key first`, "err");
+      notify(compatible ? `Set up ${label} in Settings first` : `Add your ${label} key first`, "err");
       return;
     }
     if (!home) return; // paths cannot be shortened safely until the home folder is known
@@ -272,12 +308,12 @@ function Assistant() {
       const { context, originals: real, files } = shortenContext(draft, home);
       mergeOriginals(originals.current, real);
       files.forEach((f) => bigKeys.current.add(f));
-      const out = await gate.submit(question, context, vendorId);
+      const out = await gate.submit(question, context, approvalKey);
       if (out.status === "preview") {
         set({ thinking: false, pending: { ...out.pending, before: chat.turns } });
         return;
       }
-      set({ turns: [...chat.turns, mine, { id: counter.current++, from: "ai", advice: out.answer }], thinking: false });
+      set({ turns: [...chat.turns, mine, { id: counter.current++, from: "ai", advice: out.answer, by: label }], thinking: false });
     } catch (e) {
       fail([...chat.turns, mine], e);
     }
@@ -287,19 +323,19 @@ function Assistant() {
     if (!chat.pending) return;
     set({ pending: null, turns: chat.pending.before, text: chat.pending.question });
   };
-  // A preview belongs to the vendor it was made for; switching vendor drops it.
+  // A preview belongs to the provider and host it was made for; switching either drops it.
   useEffect(() => {
-    if (chat.pending && chat.pending.vendor !== vendorId) cancelPending();
+    if (chat.pending && chat.pending.vendor !== approvalKey) cancelPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate
-  }, [vendorId, chat.pending]);
+  }, [approvalKey, chat.pending]);
   const sendPending = async () => {
     const { pending } = chat;
-    if (!pending || pending.vendor !== vendorId) return;
+    if (!pending || pending.vendor !== approvalKey) return;
     const turns: Turn[] = [...pending.before, { id: counter.current++, from: "me", text: pending.question }];
     set({ pending: null, thinking: true, turns });
     try {
       const advice = await gate.confirm(pending);
-      set({ turns: [...turns, { id: counter.current++, from: "ai", advice }], thinking: false });
+      set({ turns: [...turns, { id: counter.current++, from: "ai", advice, by: label }], thinking: false });
     } catch (e) {
       fail(turns, e);
     }
@@ -343,7 +379,7 @@ function Assistant() {
           <Icon name="assist" size={18} />
         </span>
         <div className="msg-body">
-          <span className="by">{VENDOR[t.advice.provider]?.label ?? "Assistant"}</span>
+          <span className="by">{t.by}</span>
           <div className="bubble-text">{t.advice.answer}</div>
           {t.advice.suggestions.length > 0 && (
             <div className="suggestions">
@@ -383,10 +419,7 @@ function Assistant() {
             <Segmented<AiProvider>
               value={vendorId} label="Assistant provider"
               onChange={(v) => void pickVendor(v)}
-              options={[
-                { value: "claude", label: "Claude" },
-                { value: "chatgpt", label: "ChatGPT" },
-              ]}
+              options={SWITCH}
             />
           </div>
         )}
@@ -399,7 +432,7 @@ function Assistant() {
             Preparing the assistant
           </div>
         )}
-        {prefs && !keyed && <ConnectCard provider={vendorId} />}
+        {prefs && !keyed && (isCompatible(vendorId) ? <SetupCard provider={vendorId} /> : <ConnectCard provider={vendorId} />)}
         {prefs && keyed && chat.turns.length === 0 && !chat.thinking && (
           <div className="intro rise">
             <span className="orb">
@@ -407,9 +440,17 @@ function Assistant() {
             </span>
             <h2>What do you want to find out?</h2>
             <p>I can read your scan results, your biggest folders and large files, then suggest what is safe to remove and what deserves to stay.</p>
-            <span className="privacy">
+            <span className={compatible ? "privacy two-lines" : "privacy"}>
               <Icon name="shield" size={16} />
-              {PRIVACY_NOTE}
+              {compatible ? (
+                <span>
+                  {PRIVACY_NOTE}
+                  <br />
+                  {COMPAT_NOTE}
+                </span>
+              ) : (
+                PRIVACY_NOTE
+              )}
             </span>
           </div>
         )}
@@ -417,7 +458,7 @@ function Assistant() {
         {chat.turns.map(renderTurn)}
 
         {chat.pending && (
-          <SendPreview vendor={vendor.label} question={chat.pending.question} context={chat.pending.context} onCancel={cancelPending} onSend={() => void sendPending()} />
+          <SendPreview vendor={prefs ? sendTarget(vendorId, prefs) : label} compatible={compatible} question={chat.pending.question} context={chat.pending.context} onCancel={cancelPending} onSend={() => void sendPending()} />
         )}
 
         {chat.thinking && (
@@ -451,7 +492,7 @@ function Assistant() {
             ref={box}
             rows={1}
             aria-label="Message"
-            placeholder={keyed ? "Ask anything about your disk" : `Add your ${vendor.label} key to start`}
+            placeholder={keyed ? "Ask anything about your disk" : compatible ? `Set up ${label} in Settings to start` : `Add your ${label} key to start`}
             value={chat.text}
             disabled={!keyed}
             onChange={(e) => set({ text: e.target.value })}
