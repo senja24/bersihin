@@ -265,6 +265,7 @@
   height: 320px;
   margin: -160px 0 0 -160px;
   background: conic-gradient(from 0deg, rgba(109, 123, 255, 0), rgba(109, 123, 255, 0.95) 48deg, rgba(255, 140, 205, 0.95) 96deg, rgba(255, 140, 205, 0) 140deg, rgba(109, 123, 255, 0));
+  will-change: transform;
   animation: turn 4.5s linear infinite;
 }
 .capsule::after {
@@ -294,6 +295,7 @@
 .capsule:disabled:not(.is-busy)::before {
   opacity: 0.35;
   animation-play-state: paused;
+  will-change: auto;
 }
 .capsule.is-busy::before {
   animation-duration: 1.2s;
@@ -782,6 +784,9 @@
   .rise, .stagger > *, .capsule::before, .meter.is-indeterminate > i {
     animation: none;
   }
+  .capsule::before {
+    will-change: auto;
+  }
 }
 
 .group-stack {
@@ -805,4 +810,17 @@
 .crash p {
   max-width: 520px;
   color: var(--color-ink-soft);
+}
+
+/* Behind other apps the endless animations stop (lib/activity.ts). The one-shot entrances still run, or content that
+   arrives while the window is behind would stay invisible (they end with opacity 1). */
+:root[data-idle] *,
+:root[data-idle] *::before,
+:root[data-idle] *::after {
+  animation-play-state: paused !important;
+}
+:root[data-idle] .rise,
+:root[data-idle] .stagger > *,
+:root[data-idle] .toast {
+  animation-play-state: running !important;
 }

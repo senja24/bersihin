@@ -96,6 +96,10 @@ func main() {
 			}
 			return nil
 		})
+		// The page pauses its animations while the window is not focused.
+		win.OnFocus(func() { api.WindowFocus.Emit(win, true) })
+		win.OnBlur(func() { api.WindowFocus.Emit(win, false) })
+		api.WindowFocus.Emit(win, win.IsFocused())
 		mainWin.set(win)
 	})
 	if err := mygo.App.Run(); err != nil {

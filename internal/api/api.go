@@ -47,6 +47,11 @@ import (
 // listens with events.progress.on(...) of the generated client.
 var Progress = mygo.NewEvent[model.ScanProgress]("progress")
 
+// WindowFocus tells a page whether its window has the keyboard focus. The page
+// cannot learn this alone: WKWebView reports no blur for a window that was
+// never focused, so the animations would run for a window behind other apps.
+var WindowFocus = mygo.NewEvent[bool]("window:focus")
+
 // Shell is the part of mygo.Shell the services use.
 type Shell interface {
 	TrashItem(path string) error
