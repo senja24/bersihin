@@ -1,0 +1,3 @@
+1234	/Applications/Safari.app
+204800	/Applications/Xcode.app
+88	/Users/agus/Applications/Tiny App.app

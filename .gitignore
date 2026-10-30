@@ -1,0 +1,8 @@
+reference/
+node_modules/
+dist/
+build/
+.mygo/
+*.log
+.DS_Store
+mygo_windows_*.syso

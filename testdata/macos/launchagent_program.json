@@ -1,0 +1,6 @@
+{
+  "Label": "com.spotify.webhelper",
+  "Program": "/Applications/Spotify.app/Contents/MacOS/SpotifyWebHelper",
+  "RunAtLoad": true,
+  "Disabled": true
+}

@@ -1,0 +1,16 @@
+================================================
+image-path      : /Users/agus/Downloads/Installer.dmg
+image-alias     : /Users/agus/Downloads/Installer.dmg
+shadow-path     : <none>
+icon-path       : /System/Library/PrivateFrameworks/DiskImages.framework/Resources/CDiskImage.icns
+image-type      : disk image
+system-image    : TRUE
+blockcount      : 123456
+blocksize       : 512
+/dev/disk9          	GUID_partition_scheme	
+/dev/disk9s1        	Apple_HFS           	/Volumes/Installer
+/dev/disk9s2        	Apple_APFS          	
+================================================
+image-path      : /Users/agus/Disks/work.sparseimage
+/dev/disk11         	GUID_partition_scheme	
+/dev/disk11s2       	Apple_APFS          	/Volumes/Work Images

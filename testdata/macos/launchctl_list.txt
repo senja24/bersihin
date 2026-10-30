@@ -1,0 +1,5 @@
+PID	Status	Label
+-	0	com.apple.Safari.SafeBrowsing.Service
+612	0	com.google.keystone.agent
+-	78	com.spotify.webhelper
+701	-9	com.docker.helper

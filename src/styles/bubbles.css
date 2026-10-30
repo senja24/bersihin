@@ -1,0 +1,146 @@
+/* Glass bubbles of the space map. Position and size come from Bubbles.tsx. */
+
+.bubbles {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.bubble {
+  position: absolute;
+  z-index: 1;
+  transition: width var(--duration-fill) var(--ease-out), height var(--duration-fill) var(--ease-out), left var(--duration-fill) var(--ease-out), top var(--duration-fill) var(--ease-out);
+}
+.bubble.is-hot {
+  z-index: 2;
+}
+.bubble:hover {
+  z-index: 3;
+}
+.bubble-float {
+  position: absolute;
+  inset: 0;
+  animation: bob var(--bob, 6s) ease-in-out var(--delay, 0s) infinite;
+}
+.bubble-disc {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(190, 196, 225, 0.5);
+  box-shadow: 0 1px 2px rgba(15, 18, 24, 0.06), 0 14px 32px var(--glow);
+  overflow: hidden;
+  isolation: isolate;
+  text-align: center;
+  color: inherit;
+  cursor: pointer;
+  transition: transform var(--duration-slow) var(--ease-out), box-shadow var(--duration-slow) var(--ease-out);
+}
+.bubble-disc:hover {
+  transform: scale(1.03);
+}
+.bubble-disc::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -2;
+  width: 150%;
+  height: 150%;
+  margin: -75% 0 0 -75%;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--c1) 50deg, var(--c2) 95deg, transparent 140deg, transparent 360deg);
+  opacity: 0.7;
+  animation: turn var(--spin, 12s) linear infinite;
+}
+.bubble-disc::after {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 18%, #fff 0%, rgba(255, 255, 255, 0.96) 40%, rgba(247, 247, 255, 0.9) 100%);
+  box-shadow: inset 0 1px 1px #fff, inset 0 -6px 16px var(--glow);
+}
+.bubble.is-hot .bubble-disc::before {
+  opacity: 1;
+  animation-duration: 4.5s;
+}
+.bubble.is-picked .bubble-disc {
+  transform: scale(1.06);
+  box-shadow: 0 1px 2px rgba(15, 18, 24, 0.06), 0 24px 48px var(--glow);
+}
+.bubble-chip {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--chip);
+  height: var(--chip);
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 45%), linear-gradient(135deg, var(--c1), var(--c2));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6), 0 4px 12px var(--glow);
+  color: #fff;
+}
+.bubble-chip .icon {
+  width: 55%;
+  height: 55%;
+}
+.bubble-chip.has-img {
+  background: radial-gradient(circle at 30% 22%, #fff, rgba(255, 255, 255, 0.82));
+}
+.bubble-chip img {
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.bubble-disc b {
+  max-width: 86%;
+  overflow: hidden;
+  font-size: var(--label, var(--text-sm-plus));
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bubble-size {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-ink-muted);
+}
+.bubble-badge {
+  /* Centred on the rim at 45 degrees, so it clears the icon and the label inside. */
+  position: absolute;
+  right: 14.6%;
+  top: 14.6%;
+  transform: translate(50%, -50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, #ffb347, #ff7aa8);
+  box-shadow: 0 4px 12px rgba(255, 122, 168, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@media screen and (prefers-reduced-motion: reduce) {
+  .bubble, .bubble-float, .bubble-disc::before {
+    animation: none;
+    transition: none;
+  }
+}

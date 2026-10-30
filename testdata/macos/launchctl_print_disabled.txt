@@ -1,0 +1,6 @@
+disabled services = {
+	"com.apple.Siri.agent" => enabled
+	"com.spotify.webhelper" => disabled
+	"com.old.thing" => true
+	"com.new.thing" => false
+}

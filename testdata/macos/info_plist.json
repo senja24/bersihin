@@ -1,0 +1,9 @@
+{
+  "CFBundleDisplayName": "Spotify",
+  "CFBundleExecutable": "Spotify",
+  "CFBundleIdentifier": "com.spotify.client",
+  "CFBundleName": "Spotify",
+  "CFBundleShortVersionString": "1.2.52.442",
+  "CFBundleVersion": "1.2.52.442.g12345",
+  "LSMinimumSystemVersion": "10.15"
+}
