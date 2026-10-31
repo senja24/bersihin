@@ -4,7 +4,8 @@ import { BrandGradient, Icon } from "../components/Icon";
 import { Empty, PageHead, Spinner } from "../components/ui";
 import { messageOf, timeAgo } from "../lib/format";
 import { useCachedScan, useTween } from "../lib/hooks";
-import { useApp } from "../store";
+import { protectionNote } from "../lib/systemWords";
+import { useApp, usePlatform } from "../store";
 import type { IconName, ProtectionStatus } from "../types";
 import "./system.css";
 
@@ -78,11 +79,17 @@ function buildChecks(s: ProtectionStatus, defs: Flag, scan: Flag, now: number): 
     { icon: "globe", label: "Firewall", detail: "Blocks unwanted network connections", flag: fw, tag: pill(fw) },
     { icon: "clock", label: "Definitions updated", detail: s.definitionsUpdated ? timeAgo(s.definitionsUpdated, now) : notReported, flag: defs, tag: pill(defs, ["Up to date", "Out of date"]) },
     { icon: "scan", label: "Last scan", detail: s.lastScan ? timeAgo(s.lastScan, now) : notReported, flag: scan, tag: pill(scan, ["Recent", "A while ago"]) },
+    // the platform's own further checks (SmartScreen and drive encryption on Windows), read-only like the rest
+    ...(s.checks ?? []).map((c): Check => {
+      const f = flagOf(c.on);
+      return { icon: c.label === "SmartScreen" ? "warning" : "lock", label: c.label, detail: c.detail, flag: f, tag: pill(f) };
+    }),
   ];
 }
 
 function Protection() {
   const { notify } = useApp();
+  const platform = usePlatform();
   const check = useCachedScan("protection", () => api.protection(), (e) => notify(messageOf(e, "Could not check protection"), "err"));
   const s = check.data;
   const header = <PageHead title="Protection" sub="A quick look at the security your system already has built in." />;
@@ -142,7 +149,7 @@ function Protection() {
               </li>
             ))}
           </ul>
-          <p>Bersihin is not a replacement for your security tools. It confirms that the protection already built into your Mac is on and current, and says plainly when it is not.</p>
+          <p>{protectionNote(platform)}</p>
           <button type="button" className="pbtn" disabled={check.busy} onClick={() => void check.rerun()}>
             {check.busy ? <Spinner /> : <Icon name="history" size={16} />}
             {check.busy ? "Checking" : "Check again"}

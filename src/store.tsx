@@ -157,7 +157,7 @@ export type AppState = Model &
 /** The screen behind a view that a platform may not have (see SystemInfo.unsupported). */
 const SCREEN_OF: Partial<Record<View, string>> = { applications: "applications", speed: "startup", protection: "protection" };
 
-/** Whether the platform has the view: Applications, Speed and Protection are macOS only for now. */
+/** Whether the platform has the view (System.info lists the screens it does not offer; today every platform has all). */
 export const hasView = (p: Platform, v: View) => !SCREEN_OF[v] || !p.unsupported.has(SCREEN_OF[v]!);
 
 const Ctx = createContext<AppState | null>(null);

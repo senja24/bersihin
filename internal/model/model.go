@@ -255,7 +255,7 @@ type UninstallResult struct {
 	Pending bool `json:"pending,omitempty"`
 }
 
-// ProtectionStatus summarises the Mac's built-in protection.
+// ProtectionStatus summarises the system's built-in protection.
 type ProtectionStatus struct {
 	Provider           string   `json:"provider"` // "XProtect + Gatekeeper"
 	Enabled            bool     `json:"enabled"`

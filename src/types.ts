@@ -73,7 +73,8 @@ export type CleanResult = {
   cancelled: boolean;
 };
 
-export type UninstallResult = { ok: boolean; message: string };
+/** pending: an uninstaller was started (Windows), the app is not gone yet and stays listed */
+export type UninstallResult = { ok: boolean; message: string; pending?: boolean };
 
 export type SpaceNode = {
   name: string;
@@ -151,7 +152,11 @@ export type ProtectionStatus = {
   lastScan: number | null;
   score: number; // 0..100
   notes: string[];
+  /** further read-only checks of the platform (SmartScreen, BitLocker on Windows); on null = not read */
+  checks?: ProtectionCheck[];
 };
+
+export type ProtectionCheck = { label: string; detail: string; on: boolean | null };
 
 export type AiProvider = "claude" | "chatgpt" | "claude-compatible" | "openai-compatible";
 export type Background = "mist" | "grid" | "dots" | "grain";

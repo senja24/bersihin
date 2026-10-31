@@ -11,11 +11,9 @@ import (
 // fileManager is the app RevealPath shows files in.
 const fileManager = "File Explorer"
 
-// unsupportedScreens lists the screens the page hides on Windows: the
-// installed apps, startup items and protection checks are the Mac's
-// (launchd, app bundles, Gatekeeper and the firewall) and have no Windows
-// version yet. Their services answer with nothing there.
-func unsupportedScreens() []string { return []string{"applications", "startup", "protection"} }
+// unsupportedScreens lists the screens the page hides on Windows: none now
+// that Applications, Speed and Protection read Windows' own places.
+func unsupportedScreens() []string { return []string{} }
 
 var procRtlGetVersion = syscall.NewLazyDLL("ntdll.dll").NewProc("RtlGetVersion")
 

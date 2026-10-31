@@ -14,11 +14,13 @@ export interface Platform {
   fileManager: string;
   /** "Mac" or "PC", as in "this Mac" */
   computer: string;
+  /** "macOS" or "Windows" */
+  os: string;
   /** screens the backend does not offer here */
   unsupported: ReadonlySet<string>;
 }
 
-export const MAC: Platform = { windows: false, trash: "Trash", fileManager: "Finder", computer: "Mac", unsupported: new Set() };
+export const MAC: Platform = { windows: false, trash: "Trash", fileManager: "Finder", computer: "Mac", os: "macOS", unsupported: new Set() };
 
 export function platformOf(m: Pick<SystemInfo, "platform" | "trashName" | "fileManager" | "unsupported"> | null | undefined): Platform {
   if (!m) return MAC;
@@ -28,6 +30,7 @@ export function platformOf(m: Pick<SystemInfo, "platform" | "trashName" | "fileM
     trash: m.trashName || (windows ? "Recycle Bin" : "Trash"),
     fileManager: m.fileManager || (windows ? "File Explorer" : "Finder"),
     computer: windows ? "PC" : "Mac",
+    os: windows ? "Windows" : "macOS",
     unsupported: new Set(m.unsupported ?? []),
   };
 }
