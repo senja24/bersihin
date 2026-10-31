@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"dev.agus.bersihin/internal/pathsafe"
+	"dev.agus.bersihin/internal/testenv"
+	"dev.agus.bersihin/internal/walk"
 )
 
 type env struct {
@@ -85,7 +87,7 @@ func TestTrashBlocksDangerousPaths(t *testing.T) {
 	key := e.file(t, ".ssh/id_rsa", 1)
 	secret := filepath.Join(e.outside, "secret")
 	os.WriteFile(secret, []byte("x"), 0o644)
-	os.Symlink(e.outside, filepath.Join(e.home, "Projects", "escape"))
+	testenv.Symlink(t, e.outside, filepath.Join(e.home, "Projects", "escape"))
 	paths := []string{
 		e.home,
 		filepath.Join(e.home, "Documents"),
@@ -135,7 +137,7 @@ func TestTrashReportsLockedErrorsAndGone(t *testing.T) {
 	if res.Removed != 1 || res.Freed != 7 || res.Failed != 2 {
 		t.Fatalf("res = %+v", res)
 	}
-	want := []string{"1 item is in use", "1 item could not be moved to the Trash"}
+	want := []string{"1 item is in use", "1 item could not be moved to the " + BinName}
 	if !slices.Equal(res.Skipped, want) {
 		t.Fatalf("skipped = %v, want %v", res.Skipped, want)
 	}
@@ -186,7 +188,7 @@ func TestTrashRechecksRightBeforeMoving(t *testing.T) {
 		if first {
 			first = false
 			os.Remove(b)
-			os.Symlink(victim, b)
+			testenv.Symlink(t, victim, b)
 		}
 		return inner(p)
 	}
@@ -252,7 +254,7 @@ func TestTrashFinishedIsNotCancelled(t *testing.T) {
 func TestTrashCheckedMovesAnUnchangedFile(t *testing.T) {
 	e := setup(t)
 	a := e.file(t, "Downloads/a.bin", 10)
-	fi, _ := os.Lstat(a)
+	fi, _ := walk.Lstat(a)
 	res := e.tr.TrashChecked(context.Background(), []string{a}, map[string]Identity{a: IdentityOf(fi)})
 	if res.Removed != 1 || res.Failed != 0 || !slices.Equal(e.moved, []string{a}) {
 		t.Fatalf("res = %+v moved = %v", res, e.moved)
@@ -264,7 +266,7 @@ func TestTrashCheckedMovesAnUnchangedFile(t *testing.T) {
 func TestTrashCheckedRefusesAReplacedFile(t *testing.T) {
 	e := setup(t)
 	a := e.file(t, "Downloads/a.bin", 10)
-	fi, _ := os.Lstat(a)
+	fi, _ := walk.Lstat(a)
 	want := IdentityOf(fi)
 	other := e.file(t, "Downloads/other.bin", 10)
 	os.Chtimes(other, fi.ModTime(), fi.ModTime())
@@ -288,7 +290,7 @@ func TestTrashCheckedRefusesChangedSizeMtimeLinkAndUnexpected(t *testing.T) {
 	unexpected := e.file(t, "Downloads/unexpected", 10)
 	expect := map[string]Identity{}
 	for _, p := range []string{grown, touched, linked} {
-		fi, _ := os.Lstat(p)
+		fi, _ := walk.Lstat(p)
 		expect[p] = IdentityOf(fi)
 	}
 	os.WriteFile(grown, make([]byte, 11), 0o644)
@@ -296,7 +298,7 @@ func TestTrashCheckedRefusesChangedSizeMtimeLinkAndUnexpected(t *testing.T) {
 	os.Chtimes(touched, later, later)
 	target := e.file(t, "Documents/real", 10)
 	os.Remove(linked)
-	os.Symlink(target, linked)
+	testenv.Symlink(t, target, linked)
 	res := e.tr.TrashChecked(context.Background(), []string{grown, touched, linked, unexpected}, expect)
 	if len(e.moved) != 0 || res.Failed != 4 {
 		t.Fatalf("res = %+v moved = %v", res, e.moved)
@@ -394,7 +396,7 @@ func TestTrashCheckedFolderIdentity(t *testing.T) {
 	e := setup(t)
 	dir := filepath.Join(e.home, "Downloads", "d")
 	e.file(t, "Downloads/d/a.bin", 10)
-	fi, err := os.Lstat(dir)
+	fi, err := walk.Lstat(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +410,7 @@ func TestTrashCheckedFolderIdentity(t *testing.T) {
 	e2 := setup(t)
 	dir2 := filepath.Join(e2.home, "Downloads", "d")
 	e2.file(t, "Downloads/d/a.bin", 10)
-	fi2, _ := os.Lstat(dir2)
+	fi2, _ := walk.Lstat(dir2)
 	id := IdentityOf(fi2)
 	id.Dir = true
 	if err := os.Rename(dir2, dir2+"-old"); err != nil {

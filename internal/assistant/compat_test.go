@@ -19,6 +19,7 @@ import (
 
 	"dev.agus.bersihin/internal/config"
 	"dev.agus.bersihin/internal/model"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 const compatKey = "local-key-123"
@@ -103,6 +104,7 @@ func (r *recorder) at(i int) recorded {
 func ok200(body string) answer { return answer{status: 200, body: body} }
 
 func TestCompatRequests(t *testing.T) {
+	testenv.MacPaths(t)
 	t.Run("openai-compatible", func(t *testing.T) {
 		rec := newRecorder(t, ok200(openAIReply(goodAdvice)))
 		s := compat(model.ProviderOpenAICompat, rec.srv.URL+"/api/v1", "llama-3", compatKey)
@@ -372,6 +374,7 @@ func TestExtractAdviceIsStrict(t *testing.T) {
 }
 
 func TestCompatAskExtractsAndStillDowngrades(t *testing.T) {
+	testenv.MacPaths(t)
 	text := "<think>The user asks...</think>\nHere is the result:\n```json\n" +
 		`{"answer":"Clear caches; keep the film.","suggestions":[` +
 		`{"path":"~/Library/Caches","verdict":"safe","reason":"Regenerable."},` +

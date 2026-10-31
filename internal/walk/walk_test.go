@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"dev.agus.bersihin/internal/testenv"
 )
 
 func write(t *testing.T, p string, size int) {
@@ -56,13 +59,13 @@ func TestWalkNeverFollowsSymlinks(t *testing.T) {
 	write(t, filepath.Join(outside, "secret.bin"), 1000)
 	root := t.TempDir()
 	write(t, filepath.Join(root, "real.txt"), 5)
-	if err := os.Symlink(outside, filepath.Join(root, "linkdir")); err != nil {
+	if err := testenv.Symlink(t, outside, filepath.Join(root, "linkdir")); err != nil {
 		t.Skip("symlinks unavailable:", err)
 	}
-	if err := os.Symlink(filepath.Join(outside, "secret.bin"), filepath.Join(root, "linkfile")); err != nil {
+	if err := testenv.Symlink(t, filepath.Join(outside, "secret.bin"), filepath.Join(root, "linkfile")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(root, "nowhere"), filepath.Join(root, "broken")); err != nil {
+	if err := testenv.Symlink(t, filepath.Join(root, "nowhere"), filepath.Join(root, "broken")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,10 +88,10 @@ func TestWalkSymlinkedRootIsResolvedOnce(t *testing.T) {
 	outside := t.TempDir()
 	write(t, filepath.Join(outside, "secret"), 100)
 	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(target, link); err != nil {
+	if err := testenv.Symlink(t, target, link); err != nil {
 		t.Skip(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(target, "escape")); err != nil {
+	if err := testenv.Symlink(t, outside, filepath.Join(target, "escape")); err != nil {
 		t.Fatal(err)
 	}
 	var seen, dirs []string
@@ -107,9 +110,9 @@ func TestWalkSymlinkedRootIsResolvedOnce(t *testing.T) {
 	// a link to a file, a broken link and a missing root give nothing
 	file := filepath.Join(target, "x")
 	flink := filepath.Join(t.TempDir(), "flink")
-	os.Symlink(file, flink)
+	testenv.Symlink(t, file, flink)
 	broken := filepath.Join(t.TempDir(), "broken")
-	os.Symlink(filepath.Join(target, "nowhere"), broken)
+	testenv.Symlink(t, filepath.Join(target, "nowhere"), broken)
 	for _, r := range []string{flink, broken, filepath.Join(target, "missing")} {
 		if st := Walk(context.Background(), r, Options{}); st.Files != 0 || st.Dirs != 0 {
 			t.Fatalf("walked %q: %+v", r, st)
@@ -173,7 +176,7 @@ func TestWalkParallelIsConsistent(t *testing.T) {
 	var want int64
 	for i := range 40 {
 		for j := range 5 {
-			write(t, filepath.Join(root, "d"+string(rune('a'+i%10)), "s"+string(rune('a'+i/10)), string(rune('a'+j))+string(rune('a'+i))), i+j+1)
+			write(t, filepath.Join(root, "d"+string(rune('a'+i%10)), "s"+string(rune('a'+i/10)), string(rune('a'+j))+strconv.Itoa(i)), i+j+1) // names valid on Windows too
 			want += int64(i + j + 1)
 		}
 	}
@@ -193,7 +196,7 @@ func TestSize(t *testing.T) {
 	if got := Size(context.Background(), filepath.Join(root, "c")); got != 3 {
 		t.Errorf("file size = %d", got)
 	}
-	if err := os.Symlink(root, filepath.Join(t.TempDir(), "l")); err == nil {
+	if err := os.Symlink(root, filepath.Join(t.TempDir(), "l")); !testenv.Windows && err == nil {
 		l := filepath.Join(t.TempDir(), "l2")
 		_ = os.Symlink(root, l)
 		if got := Size(context.Background(), l); got != 0 {
@@ -355,6 +358,7 @@ func TestWalkSkipDirConcurrentSkips(t *testing.T) {
 }
 
 func TestWalkCountsUnreadableFolders(t *testing.T) {
+	testenv.Permissions(t)
 	if os.Geteuid() == 0 {
 		t.Skip("root can list any folder")
 	}
@@ -383,6 +387,7 @@ func TestWalkCountsUnreadableFolders(t *testing.T) {
 // The status change time of a file and of a folder is read, and a folder's
 // own lstat result reaches OnDirInfo.
 func TestWalkReportsStatusChangeTimes(t *testing.T) {
+	testenv.StatusChange(t)
 	root := t.TempDir()
 	write(t, filepath.Join(root, "d", "a.txt"), 5)
 	old := time.Now().Add(-48 * time.Hour)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"dev.agus.bersihin/internal/testenv"
 	"dev.agus.bersihin/internal/walk"
 )
 
@@ -70,6 +71,7 @@ func offered(f *fixture, p string) bool {
 // on APFS, but an app that records an open (the last-used extended attribute)
 // or a change of attributes moves the status change time.
 func TestFileInsideFolderStatusChangeKeepsTheFolder(t *testing.T) {
+	testenv.StatusChange(t)
 	f := newFixture(t)
 	proj, t0 := agedTree(t, f)
 	clockFor(f, t0)
@@ -113,6 +115,7 @@ func TestSubfolderModificationKeepsTheFolder(t *testing.T) {
 
 // Finding 8: a top-level file counts by its status change time as well.
 func TestTopLevelFileStatusChangeKeepsIt(t *testing.T) {
+	testenv.StatusChange(t)
 	f := newFixture(t)
 	file := put(t, f.p("Downloads", "doc.pdf"), 100, old)
 	at(t, file, old, old)
@@ -146,6 +149,7 @@ func TestFreshStatusChangeKeepsTheFolderUntilItIsOld(t *testing.T) {
 
 // Finding 2: a subfolder that cannot be listed may hold anything.
 func TestFolderWithUnreadableSubfolderIsKept(t *testing.T) {
+	testenv.Permissions(t)
 	if os.Geteuid() == 0 {
 		t.Skip("root can list any folder")
 	}

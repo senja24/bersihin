@@ -14,6 +14,7 @@ import (
 
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/sys"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 func sample(t *testing.T, name string) string {
@@ -55,7 +56,7 @@ func newFixture(t *testing.T) *fixture {
 	touch(f.user, "bad.plist")
 	touch(f.user, "notes.txt")
 	touch(f.system, "com.google.keystone.agent.plist") // same label as the user's
-	os.Symlink(filepath.Join(f.user, "bad.plist"), filepath.Join(f.user, "link.plist"))
+	testenv.Symlink(t, filepath.Join(f.user, "bad.plist"), filepath.Join(f.user, "link.plist"))
 	// a label no quoting rule would let through elevated
 	touch(f.system, "weird name'$(x).plist")
 

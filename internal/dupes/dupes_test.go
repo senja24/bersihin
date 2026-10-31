@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dev.agus.bersihin/internal/progress"
+	"dev.agus.bersihin/internal/testenv"
 	"dev.agus.bersihin/internal/walk"
 )
 
@@ -142,7 +143,7 @@ func TestHardLinksAndLinksAreNotCopies(t *testing.T) {
 	if err := os.Link(filepath.Join(root, "orig.bin"), filepath.Join(root, "hard.bin")); err != nil {
 		t.Skip("hard links unavailable:", err)
 	}
-	os.Symlink(filepath.Join(root, "orig.bin"), filepath.Join(root, "soft.bin"))
+	testenv.Symlink(t, filepath.Join(root, "orig.bin"), filepath.Join(root, "soft.bin"))
 	entries := Collect(context.Background(), []string{root, root}, nil) // the same root twice
 	if len(entries) != 1 {
 		t.Fatalf("entries = %v", paths(entries))
@@ -192,6 +193,7 @@ func TestFindReportsProgress(t *testing.T) {
 }
 
 func TestRoots(t *testing.T) {
+	testenv.MacPaths(t)
 	got := Roots("/Users/a")
 	want := []string{"/Users/a/Desktop", "/Users/a/Documents", "/Users/a/Downloads", "/Users/a/Pictures", "/Users/a/Movies", "/Users/a/Music"}
 	if !slices.Equal(got, want) {
@@ -256,7 +258,7 @@ func TestFullHashRegularRefusesLinksAndFolders(t *testing.T) {
 	real := filepath.Join(dir, "real")
 	os.WriteFile(real, []byte("content"), 0o644)
 	link := filepath.Join(dir, "link")
-	os.Symlink(real, link)
+	testenv.Symlink(t, real, link)
 	want, err := FullHash(context.Background(), real)
 	if err != nil {
 		t.Fatal(err)

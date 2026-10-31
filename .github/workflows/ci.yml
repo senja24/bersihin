@@ -27,14 +27,19 @@ jobs:
         run: |
           GOARCH=amd64 go build ./...
           GOARCH=arm64 go build ./...
-      - name: Windows tests
-        # the junctions, identity, drives, Recycle Bin and safety rule tests, and the
-        # platform-neutral Windows rule tables
-        run: go test -count=1 -run Windows ./...
-      - name: Whole Go suite (informational)
-        # many older tests assume POSIX paths and symlinks; they are not ported yet
-        continue-on-error: true
-        run: go test -count=1 ./...
+      - name: Go tests
+        # the whole suite gates the build. Tests of the macOS rules on POSIX paths, and tests
+        # that need symlinks, Unix permission bits or the Unix ctime, skip themselves on Windows
+        # with the reason (internal/testenv); the Windows rules have their own tests.
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -v ./... 2>&1 | tee go-test.log | grep -E '^(ok|FAIL|panic)|--- FAIL'
+      - name: Tests skipped on Windows
+        # every skip with its reason, so a skip that hides a regression is seen
+        if: always()
+        shell: bash
+        run: grep -E -A1 -- '--- SKIP' go-test.log || true
       - name: Page checks
         run: |
           bun run typecheck

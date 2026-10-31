@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dev.agus.bersihin/internal/testenv"
 )
 
 // Files the Trash guard refuses are not listed, and the list is still filled
@@ -81,6 +83,7 @@ func TestScanAllowAcrossRunningTrim(t *testing.T) {
 // The files Allow refuses are counted, once each, so that the page can say
 // they were left out.
 func TestScanCountedReportsRefusedFiles(t *testing.T) {
+	testenv.MacLayout(t)
 	old := trimAt
 	trimAt = 40
 	t.Cleanup(func() { trimAt = old })

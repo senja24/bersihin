@@ -11,6 +11,7 @@ import (
 
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/progress"
+	"dev.agus.bersihin/internal/testenv"
 	"dev.agus.bersihin/internal/walk"
 )
 
@@ -102,7 +103,7 @@ func TestScan(t *testing.T) {
 	put(t, filepath.Join(vol, "System", "big"), 900*mb)
 	put(t, filepath.Join(vol, ".Trashes", "x"), 900*mb)
 	put(t, filepath.Join(vol, "Users", "x"), 1*mb)
-	os.Symlink(filepath.Join(vol, "Archive"), filepath.Join(home, "linkToArchive"))
+	testenv.Symlink(t, filepath.Join(vol, "Archive"), filepath.Join(home, "linkToArchive"))
 
 	s := &Scanner{
 		Home: home, TempDir: tmp,
@@ -218,7 +219,7 @@ func TestDriveWalkSkipsRealLibraryAndUsers(t *testing.T) {
 	put(t, filepath.Join(vol, "Users", "bob", "Library", "Containers", "vm.img"), 900*mb)
 	put(t, filepath.Join(vol, "Users", "bob", "Movies", "film.mov"), 900*mb)
 	put(t, filepath.Join(vol, "Archive", "backup.zip"), 400*mb)
-	if err := os.Symlink(filepath.Join(vol, "Moved", "Library"), filepath.Join(home, "Library")); err != nil {
+	if err := testenv.Symlink(t, filepath.Join(vol, "Moved", "Library"), filepath.Join(home, "Library")); err != nil {
 		t.Skip(err)
 	}
 	s := &Scanner{
@@ -352,7 +353,7 @@ func TestScanSkipsEmulatorStoresAndMorePackageTypes(t *testing.T) {
 	// a bare repository whose HEAD is a link
 	put(t, filepath.Join(home, "Dev", "target-ref"), 10)
 	os.MkdirAll(filepath.Join(home, "Dev", "linkrepo", "refs"), 0o755)
-	if err := os.Symlink(filepath.Join(home, "Dev", "target-ref"), filepath.Join(home, "Dev", "linkrepo", "HEAD")); err != nil {
+	if err := testenv.Symlink(t, filepath.Join(home, "Dev", "target-ref"), filepath.Join(home, "Dev", "linkrepo", "HEAD")); err != nil {
 		t.Fatal(err)
 	}
 	// ~/.android itself is not skipped, only its avd folder

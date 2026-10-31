@@ -117,8 +117,8 @@ func TestNewestXProtectWins(t *testing.T) {
 }
 
 func TestNotOnMac(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("New() runs the real macOS tools here; this test is for other systems")
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("New() reads the real system's protection here (see the TestWindows* tests for Windows); this test is for other systems")
 	}
 	st := New().Status(context.Background())
 	if st.Provider != "Unknown" || st.Enabled || st.Score != 0 || len(st.Notes) != 1 {

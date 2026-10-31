@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"dev.agus.bersihin/internal/testenv"
 )
 
 var pngBytes = []byte("\x89PNG\r\n\x1a\nfake")
@@ -69,6 +71,7 @@ func TestIcons(t *testing.T) {
 }
 
 func TestVolumesNeedALocalMount(t *testing.T) {
+	testenv.MacPaths(t)
 	var asked []string
 	p := &Provider{
 		Home:        "/Users/a",
@@ -117,6 +120,8 @@ func TestSlowIconTimesOutAndIsNotCached(t *testing.T) {
 	if len(got) != 0 {
 		t.Fatalf("got %v", got)
 	}
+	// the retry may take its time: on Windows the existence check alone can outlast 20 ms
+	p.Timeout = 5 * time.Second
 	got, _ = p.Icons(context.Background(), []string{f})
 	if len(got) != 1 {
 		t.Fatalf("retry failed: %v", got)
@@ -134,6 +139,7 @@ func TestCacheIsBounded(t *testing.T) {
 }
 
 func TestCandidateIsCaseAndFormInsensitive(t *testing.T) {
+	testenv.MacPaths(t)
 	p := &Provider{Home: "/Users/a", LocalMounts: func(context.Context) []string { return []string{"/Volumes/Data"} }}
 	for path, want := range map[string]bool{
 		"/net/x": false, "/NET/x": false, "/Net": false, "/NETWORK/srv": false, "/Home/user": false, "/HOME": false,
@@ -191,6 +197,7 @@ func TestStuckLookupsAreBounded(t *testing.T) {
 }
 
 func TestDataVolumeAliasesOfNetworkFoldersAreRefused(t *testing.T) {
+	testenv.MacPaths(t)
 	p := &Provider{Home: "/Users/a", LocalMounts: func(context.Context) []string { return []string{"/Volumes/Data"} }}
 	for _, path := range []string{
 		"/System/Volumes/Data/Volumes/Media/x", "/system/volumes/data/volumes/Data/x", "/System/Volumes/Data/Volumes",
@@ -207,6 +214,7 @@ func TestDataVolumeAliasesOfNetworkFoldersAreRefused(t *testing.T) {
 }
 
 func TestExistenceCheckIsTimeLimited(t *testing.T) {
+	testenv.MacPaths(t)
 	release := make(chan struct{})
 	defer close(release)
 	p := &Provider{
@@ -236,6 +244,7 @@ func TestExistenceCheckIsTimeLimited(t *testing.T) {
 }
 
 func TestVarAutomountAndFoldedSegments(t *testing.T) {
+	testenv.MacPaths(t)
 	p := &Provider{Home: "/Users/a"}
 	// /var is /private/var on macOS
 	for _, path := range []string{
@@ -266,7 +275,7 @@ func TestParentLinkIntoARefusedFolderIsCaughtInTheSlot(t *testing.T) {
 	net := filepath.Join(base, "net")
 	os.MkdirAll(filepath.Join(net, "host", "share"), 0o755)
 	alias := filepath.Join(base, "alias")
-	if err := os.Symlink(net, alias); err != nil {
+	if err := testenv.Symlink(t, net, alias); err != nil {
 		t.Skip(err)
 	}
 	saved := autofsNames

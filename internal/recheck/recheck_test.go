@@ -13,6 +13,7 @@ import (
 
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/snapshot"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 var base = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -76,7 +77,7 @@ func TestLargeChanges(t *testing.T) {
 			other := filepath.Join(filepath.Dir(p), "target")
 			write(t, other, strings.Repeat("x", 10), base)
 			os.Remove(p)
-			os.Symlink(other, p)
+			testenv.Symlink(t, other, p)
 		}},
 		{"replaced by a directory", func(t *testing.T, p string) { os.Remove(p); os.Mkdir(p, 0o755) }},
 	}
@@ -177,7 +178,7 @@ func TestDupesKeptCopyProblems(t *testing.T) {
 			other := kept + ".real"
 			write(t, other, "same content", base)
 			os.Remove(kept)
-			os.Symlink(other, kept)
+			testenv.Symlink(t, other, kept)
 		}},
 	}
 	for _, c := range cases {
