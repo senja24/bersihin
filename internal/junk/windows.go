@@ -45,7 +45,8 @@ func winRootAllowed(home, local, p string) bool {
 // LocalAppData\Temp: %TEMP% and %TMP% are not read, so neither one set to
 // C:\Windows\Temp (admin only) nor one set to Downloads or Documents can
 // make their files be deleted for good. The rules are those of the Mac: cache files newer than a day
-// stay, virtual environments stay, old downloads go to the Recycle Bin.
+// stay, virtual environments stay, old downloads go to the Recycle Bin. The
+// Recycle Bin itself is emptied through the shell, never ticked by default.
 func WindowsDefs(home string, env func(string) string) []Def {
 	local := winLocal(home, env)
 	in := func(p ...string) string { return filepath.Join(append([]string{local}, p...)...) }
@@ -114,6 +115,11 @@ func WindowsDefs(home string, env func(string) string) []Def {
 					in("pip", "Cache"), filepath.Join(home, ".gradle", "caches"),
 				})
 			},
+		},
+		{
+			ID: "recycle-bin", Name: "Recycle Bin",
+			Description: "Files you already deleted, on every drive. Emptying it removes them permanently.",
+			Icon:        model.IconTrash, Safe: false, Kind: KindRecycleBin,
 		},
 		{
 			ID: "old-downloads", Name: "Old downloads",

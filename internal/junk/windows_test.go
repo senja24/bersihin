@@ -70,7 +70,7 @@ func TestWindowsDefsRoots(t *testing.T) {
 	for _, d := range defs {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"win-temp", "win-crashdumps", "browser-cache", "dev-cache", "old-downloads"}) {
+	if !slices.Equal(ids, []string{"win-temp", "win-crashdumps", "browser-cache", "dev-cache", "recycle-bin", "old-downloads"}) {
 		t.Fatalf("ids = %v", ids)
 	}
 	if got := rootsOf(defs, "win-temp"); !slices.Equal(got, []string{filepath.Join(local, "Temp")}) {
