@@ -51,6 +51,7 @@ func (e Exec) Run(ctx context.Context, name string, args ...string) (Result, err
 	var out, errb bytes.Buffer
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout, cmd.Stderr = &out, &errb
+	hideWindow(cmd)
 	// a child that ignores the kill and holds the pipes open must not hang the call
 	cmd.WaitDelay = 2 * time.Second
 	err := cmd.Run()

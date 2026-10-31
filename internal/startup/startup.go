@@ -1,5 +1,6 @@
-// Package startup lists the launch agents that run at login and turns them on
-// and off with launchctl.
+// Package startup lists what runs at login and turns it on and off: the launch
+// agents of a Mac with launchctl, and on Windows the Run keys, Startup folders
+// and logon tasks, with the StartupApproved values Task Manager uses.
 package startup
 
 import (
@@ -19,6 +20,7 @@ import (
 	"dev.agus.bersihin/internal/parse"
 	"dev.agus.bersihin/internal/sys"
 	"dev.agus.bersihin/internal/walk"
+	"dev.agus.bersihin/internal/winreg"
 )
 
 // Source is a folder of launch agent plists.
@@ -36,8 +38,16 @@ type Manager struct {
 	UID     int
 	Sources []Source
 
+	// Registry, when set, makes this the Windows Manager (see windows.go):
+	// Run keys, Startup folders and logon tasks from Win.
+	Registry winreg.Registry
+	Win      WinSources
+	// Now stamps the StartupApproved values written on Windows; default time.Now.
+	Now func() time.Time
+
 	mu      sync.Mutex
 	targets map[string]target
+	win     map[string]winTarget
 }
 
 type target struct {
@@ -167,6 +177,9 @@ func (m *Manager) readSource(ctx context.Context, src Source, loaded map[string]
 // List returns the launch agents, heaviest first, and refreshes the table of
 // what can be toggled.
 func (m *Manager) List(ctx context.Context) ([]model.StartupItem, error) {
+	if m.Registry != nil {
+		return m.listWindows(ctx)
+	}
 	items := []model.StartupItem{}
 	if m.Run == nil {
 		return items, nil
@@ -197,7 +210,14 @@ func (m *Manager) List(ctx context.Context) ([]model.StartupItem, error) {
 	m.mu.Lock()
 	m.targets = targets
 	m.mu.Unlock()
+	return sortItems(items), nil
+}
 
+// sortItems orders items heaviest first, then by name.
+func sortItems(items []model.StartupItem) []model.StartupItem {
+	if items == nil {
+		items = []model.StartupItem{}
+	}
 	rank := map[model.Impact]int{model.ImpactHigh: 0, model.ImpactMedium: 1, model.ImpactLow: 2}
 	slices.SortStableFunc(items, func(a, b model.StartupItem) int {
 		if rank[a.Impact] != rank[b.Impact] {
@@ -205,7 +225,7 @@ func (m *Manager) List(ctx context.Context) ([]model.StartupItem, error) {
 		}
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
-	return items, nil
+	return items
 }
 
 // ShQuote quotes s for /bin/sh: single quotes, with each ' written as '\”.
@@ -238,6 +258,12 @@ func (m *Manager) loaded(ctx context.Context, label string) bool {
 // Set turns an item on or off and returns the new list. The page sends the id
 // of an item from List, never a label or a path.
 func (m *Manager) Set(ctx context.Context, id string, enabled bool) ([]model.StartupItem, error) {
+	if m.Registry != nil {
+		if len(id) > 600 {
+			return nil, errors.New("Invalid request")
+		}
+		return m.setWindows(ctx, id, enabled)
+	}
 	if m.Run == nil {
 		return nil, errors.New("Startup items are not supported on this system")
 	}
