@@ -250,6 +250,9 @@ type InstalledApp struct {
 type UninstallResult struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message"`
+	// Pending is true when an uninstaller was started (Windows) rather than
+	// the app removed: it may still be cancelled, so the app stays listed.
+	Pending bool `json:"pending,omitempty"`
 }
 
 // ProtectionStatus summarises the Mac's built-in protection.
