@@ -795,6 +795,11 @@ func (r *Resolver) Resolve(p string) (string, Verdict) {
 		return "", Blocked
 	}
 	abs := filepath.Clean(p)
+	// a junction above the path: Windows follows it, EvalSymlinks does not
+	// (it fails there, or the file reads as gone), so it is looked for first
+	if r.real.Windows && reparseAbove(abs) {
+		return "", Blocked
+	}
 	fi, err := os.Lstat(abs)
 	if err != nil {
 		return "", missingOrBlocked(err)
@@ -805,6 +810,9 @@ func (r *Resolver) Resolve(p string) (string, Verdict) {
 	}
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
+		if r.real.Windows {
+			return "", Blocked // it was there a moment ago
+		}
 		return "", missingOrBlocked(err)
 	}
 	// EvalSymlinks leaves Windows junctions in place: none may lead there
@@ -868,6 +876,24 @@ func reparseBetween(top, p string) bool {
 	g := Guard{FoldCase: true}
 	for a := p; g.Inside(top, a); a = filepath.Dir(a) {
 		fi, err := os.Lstat(a)
+		if err != nil || fi.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// reparseAbove reports whether a folder above p, up to its volume root, is a
+// link or another reparse point, or cannot be examined. A folder that does
+// not exist is passed over, so that a path that is gone still reads as gone.
+func reparseAbove(p string) bool {
+	top := filepath.VolumeName(p) + string(filepath.Separator)
+	g := Guard{FoldCase: true}
+	for a := filepath.Dir(p); g.Inside(top, a); a = filepath.Dir(a) {
+		fi, err := os.Lstat(a)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil || fi.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
 			return true
 		}
