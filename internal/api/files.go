@@ -30,8 +30,9 @@ type Junk struct{ c *core }
 func (j *Junk) scanner(at time.Time) *junk.Scanner {
 	return &junk.Scanner{
 		Home: j.c.deps.Home, Trasher: j.c.trasher, Now: func() time.Time { return at },
-		// a file opened in Preview or Finder counts as used, whatever its atime says
-		LastUsed: junk.MdlsLastUsed(j.c.deps.Run),
+		// a file opened in Preview or Finder (on Windows: through the shell,
+		// as Recent Items show) counts as used, whatever its atime says
+		LastUsed: lastUsed(j.c.deps.Run),
 	}
 }
 

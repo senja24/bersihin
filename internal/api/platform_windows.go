@@ -3,10 +3,26 @@
 package api
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"syscall"
 	"unsafe"
+
+	"dev.agus.bersihin/internal/junk"
+	"dev.agus.bersihin/internal/sys"
 )
+
+// lastUsed is the junk scan's extra "last used" signal on Windows: the
+// shortcuts of Recent Items, which File Explorer dates when a file is opened.
+func lastUsed(sys.Runner) func(ctx context.Context, paths []string) (map[string]int64, error) {
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		return nil
+	}
+	return junk.RecentItemsLastUsed(filepath.Join(appData, "Microsoft", "Windows", "Recent"))
+}
 
 // fileManager is the app RevealPath shows files in.
 const fileManager = "File Explorer"
