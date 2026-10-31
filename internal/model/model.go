@@ -265,6 +265,17 @@ type ProtectionStatus struct {
 	LastScan           *int64   `json:"lastScan"`
 	Score              int      `json:"score"` // 0..100
 	Notes              []string `json:"notes"`
+	// Checks are further read-only checks of the platform, such as
+	// SmartScreen and BitLocker on Windows. Empty on a Mac.
+	Checks []ProtectionCheck `json:"checks,omitempty"`
+}
+
+// ProtectionCheck is one more protection setting, as read.
+type ProtectionCheck struct {
+	Label  string `json:"label"`
+	Detail string `json:"detail"`
+	// On is nil when it could not be read.
+	On *bool `json:"on"`
 }
 
 // AiProvider selects the assistant's backend.
