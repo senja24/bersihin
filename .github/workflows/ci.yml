@@ -34,7 +34,20 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          go test -count=1 -v ./... 2>&1 | tee go-test.log | grep -E '^(ok|FAIL|panic)|--- FAIL'
+          go test -count=1 -timeout 15m -v ./... 2>&1 | tee go-test.log | grep -E '^(ok|FAIL|panic)|--- FAIL'
+      - name: Go test failures
+        # what each failing test said, and where a panic or timeout was
+        if: failure()
+        shell: bash
+        run: |
+          grep -n -E -A20 -- '--- FAIL|^panic:' go-test.log | head -n 3000 || true
+      - name: Upload the Go test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-test-log-windows
+          path: go-test.log
+          if-no-files-found: warn
       - name: Tests skipped on Windows
         # every skip with its reason, so a skip that hides a regression is seen
         if: always()
