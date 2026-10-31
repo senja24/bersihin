@@ -40,10 +40,11 @@ func winRootAllowed(home, local, p string) bool {
 }
 
 // WindowsDefs returns the categories of a Windows profile whose folder is
-// home, with env for %TEMP% and %LOCALAPPDATA%. Every root lives in the
-// profile (a %TEMP% elsewhere, such as C:\Windows\Temp, is left out: no
-// admin-only folder is ever cleaned), is a real folder and not a link or
-// junction. The rules are those of the Mac: cache files newer than a day
+// home, with env for %LOCALAPPDATA%. Every root lives in the profile, is a
+// real folder and not a link or junction. The Temp folder is only ever
+// LocalAppData\Temp: %TEMP% and %TMP% are not read, so neither one set to
+// C:\Windows\Temp (admin only) nor one set to Downloads or Documents can
+// make their files be deleted for good. The rules are those of the Mac: cache files newer than a day
 // stay, virtual environments stay, old downloads go to the Recycle Bin.
 func WindowsDefs(home string, env func(string) string) []Def {
 	local := winLocal(home, env)
@@ -73,7 +74,7 @@ func WindowsDefs(home string, env func(string) string) []Def {
 			ID: "win-temp", KeepNewer: keepFresh, Name: "Temporary files",
 			Description: "Files apps and installers leave in your Temp folder. Anything from the last day, or still in use, stays.",
 			Icon:        model.IconLayers, Safe: true,
-			Roots: func() []Root { return dirs([]string{env("TEMP"), env("TMP"), in("Temp")}) },
+			Roots: func() []Root { return dirs([]string{in("Temp")}) },
 		},
 		{
 			ID: "win-crashdumps", KeepNewer: keepFresh, Name: "Crash dumps",

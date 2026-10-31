@@ -60,8 +60,9 @@ func TestWindowsDefsRoots(t *testing.T) {
 		os.MkdirAll(filepath.Join(local, d), 0o755)
 	}
 	os.MkdirAll(f.p(".gradle", "caches"), 0o755)
-	// a %TEMP% outside the profile (C:\Windows\Temp) is never cleaned
-	env := map[string]string{"TEMP": filepath.Join(f.outside, "WindowsTemp"), "TMP": filepath.Join(local, "Temp")}
+	// %TEMP% is never read: neither C:\Windows\Temp nor Downloads becomes a root
+	os.MkdirAll(f.p("Downloads"), 0o755)
+	env := map[string]string{"TEMP": filepath.Join(f.outside, "WindowsTemp"), "TMP": f.p("Downloads")}
 	os.MkdirAll(env["TEMP"], 0o755)
 	defs := WindowsDefs(f.home, func(k string) string { return env[k] })
 

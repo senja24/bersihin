@@ -94,6 +94,10 @@ type Options struct {
 	// from the walker's goroutines without the lock, so it must be safe for
 	// concurrent use. A folder it skips is left out like one SkipDir skips.
 	SkipDirConcurrent func(path, name string, depth int) bool
+	// OnReparse is called for every entry that is a reparse point other than
+	// a symbolic link (a Windows junction, mount point or cloud folder): it
+	// is never entered nor reported. It does not happen on macOS.
+	OnReparse func(path string)
 	// OnTick is a heartbeat, roughly every 2,000 entries.
 	OnTick func(entries int, current string)
 }
@@ -244,6 +248,11 @@ func (w *walker) readDir(it item) {
 			// links are never followed, and never reported; nor is any other
 			// reparse point (a Windows junction or mount point reads as
 			// irregular, and so does a cloud placeholder folder)
+			if typ&fs.ModeIrregular != 0 && w.opt.OnReparse != nil {
+				w.mu.Lock()
+				w.opt.OnReparse(w.out(full))
+				w.mu.Unlock()
+			}
 		case typ.IsDir():
 			var fi fs.FileInfo
 			if w.opt.SameDevice || w.opt.OnDirInfo != nil {

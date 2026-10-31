@@ -56,6 +56,9 @@ func sizeOf(ctx context.Context, p string) (size int64, crossed bool) {
 			}
 			return false
 		},
+		// Windows: a junction or mount point inside may lead to another
+		// volume or anywhere on this one; the folder is left alone
+		OnReparse: func(string) { crossed = true },
 	})
 	return st.Bytes, crossed
 }

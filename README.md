@@ -47,7 +47,7 @@ Bersihin 0.2 runs on Windows 10 and 11 (x64 and Arm64). It has Smart Scan, Clean
 
 | Screen | What it looks at on Windows |
 |---|---|
-| **Cleanup** | Your Temp folder (`%TEMP%`, inside your profile only), crash dumps (`%LOCALAPPDATA%\CrashDumps`), browser caches (Chrome, Edge, Brave, Vivaldi, Opera, Firefox, every profile), developer caches (npm, pnpm, Yarn, pip, Gradle), and old downloads (top-level items in `Downloads` untouched for 90+ days, which go to the Recycle Bin). Nothing that needs administrator rights is cleaned, and nothing in `AppData\Roaming` or in the `Microsoft` folders of AppData apart from Edge's own caches. |
+| **Cleanup** | Your Temp folder (`%LOCALAPPDATA%\Temp` only, whatever `%TEMP%` says), crash dumps (`%LOCALAPPDATA%\CrashDumps`), browser caches (Chrome, Edge, Brave, Vivaldi, Opera, Firefox, every profile), developer caches (npm, pnpm, Yarn, pip, Gradle), and old downloads (top-level items in `Downloads` untouched for 90+ days, which go to the Recycle Bin). Nothing that needs administrator rights is cleaned, and nothing in `AppData\Roaming` or in the `Microsoft` folders of AppData apart from Edge's own caches. |
 | **Large Files** | Your profile and the other fixed drives. Skips `AppData`, the Windows folders of a drive (`Windows`, `Program Files`, `ProgramData`, `$Recycle.Bin`...), VM and container stores, and OneDrive files that are online only. |
 | **Duplicates** | Desktop, Documents, Downloads, Pictures, Videos and Music, as on the Mac. Online-only OneDrive files are never read. |
 | **Space Map** | Your profile and each fixed drive. |

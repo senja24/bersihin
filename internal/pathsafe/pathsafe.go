@@ -454,9 +454,18 @@ func (g Guard) secretAnywhere(parts []string) bool {
 	return false
 }
 
+// cleanMount is clean for the mount of a data volume, which on Windows is
+// a bare drive root (D:\) that clean refuses as a path to remove.
+func cleanMount(m string) (string, bool) {
+	if filepath.Separator == '\\' && len(m) == 3 && WindowsShapeOK(m) {
+		return strings.ToUpper(m[:1]) + `:\`, true
+	}
+	return clean(m)
+}
+
 func (g Guard) safeDrive(abs, mount string) bool {
 	home, homeOK := clean(g.Home)
-	mount, ok := clean(mount)
+	mount, ok := cleanMount(mount)
 	if !ok || !homeOK {
 		return false
 	}
