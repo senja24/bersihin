@@ -175,7 +175,7 @@ func newCore(d Deps) *core {
 	}
 	c.trasher = &trash.Trasher{
 		Guard: func(ctx context.Context) pathsafe.Guard {
-			return pathsafe.NewGuard(d.Home, c.disks.DataMounts(ctx))
+			return pathsafe.ForPlatform(d.Home, c.disks.DataMounts(ctx))
 		},
 		Move: d.Shell.TrashItem,
 	}
