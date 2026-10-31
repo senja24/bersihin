@@ -229,3 +229,8 @@
     animation: none;
   }
 }
+
+/* Windows has no Speed, Protection or Applications screen yet: the Cleanup tile takes the row */
+.tiles[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}

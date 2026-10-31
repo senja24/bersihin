@@ -87,3 +87,9 @@ a:hover {
   --app-region: no-drag;
   -webkit-app-region: no-drag;
 }
+
+/* Windows: no traffic lights on the left; MyGo draws minimize, maximize and close at the top right */
+.app[data-platform="windows"] > .titlebar {
+  padding-left: var(--space-5);
+  padding-right: calc(var(--space-5) + var(--mygo-titlebar-inset-right, 138px));
+}

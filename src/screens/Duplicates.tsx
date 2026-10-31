@@ -40,7 +40,7 @@ function GroupCard({ group, index, keeper, skipped, locked, home, icon, onSkip, 
   group: DuplicateGroup; index: number; keeper: string; skipped: boolean; locked: boolean; home?: string; icon?: string | undefined;
   onSkip: () => void; onKeep: (path: string) => void; onReveal: (path: string) => void;
 }) {
-  const volumes = useApp().volumes;
+  const { volumes, platform } = useApp();
   const first = group.files[0]!.path;
   const name = leafName(first);
   const newest = latest(group);
@@ -94,12 +94,12 @@ function GroupCard({ group, index, keeper, skipped, locked, home, icon, onSkip, 
                   {f.path === newest ? " · newest" : ""}
                 </div>
               </div>
-              <span className={isKeeper ? "fate keep" : "fate trash"}>{isKeeper ? "Keep" : skipped ? "Leave" : "To Trash"}</span>
+              <span className={isKeeper ? "fate keep" : "fate trash"}>{isKeeper ? "Keep" : skipped ? "Leave" : `To ${platform.trash}`}</span>
               <button
                 type="button"
                 className="icon-btn"
-                title="Show in Finder"
-                aria-label="Show in Finder"
+                title={`Show in ${platform.fileManager}`}
+                aria-label={`Show in ${platform.fileManager}`}
                 onClick={(e) => {
                   e.preventDefault();
                   onReveal(f.path);
@@ -117,6 +117,7 @@ function GroupCard({ group, index, keeper, skipped, locked, home, icon, onSkip, 
 
 function Duplicates() {
   const app = useApp();
+  const bin = app.platform.trash;
   const { machine, prefs, notify } = app;
   const scanLive = useLive("dupes");
   const scan = useCachedScan("duplicates", findGroups, (e) => notify(messageOf(e, "Comparison failed"), "err"));
@@ -176,7 +177,7 @@ function Duplicates() {
     const paths = doomed.map((d) => d.path);
     try {
       const res = await api.trashPaths(scanId, paths);
-      const out = trashSummary(res, "copy", "copies");
+      const out = trashSummary(res, "copy", "copies", bin);
       notify(out.text, out.tone);
       if (isPartial(res) || res.cancelled) {
         // something stayed or the run was stopped: only a new look shows what is really left
@@ -196,13 +197,13 @@ function Duplicates() {
         skipped.reset();
         void scan.rerun();
       } else if (isConfirmError(e)) {
-        notify("The confirmation ran out. Choose Move to Trash again", "err");
+        notify(`The confirmation ran out. Choose Move to ${bin} again`, "err");
       } else if (wasCancelled(e)) {
         notify("Moving stopped");
         app.afterChange();
         void scan.rerun();
       } else {
-        notify(messageOf(e, "Could not move copies to Trash"), "err");
+        notify(messageOf(e, `Could not move copies to ${bin}`), "err");
       }
     } finally {
       set({ moving: false });
@@ -211,7 +212,7 @@ function Duplicates() {
 
   return (
     <div className="screen">
-      <PageHead title="Duplicates" sub="Files with identical contents, whatever they are called. The newest copy stays; the others go to the Trash.">
+      <PageHead title="Duplicates" sub={`Files with identical contents, whatever they are called. The newest copy stays; the others go to the ${bin}.`}>
         {hasGroups && (
           <div className="head-stat">
             <span>Wasted</span>
@@ -298,16 +299,16 @@ function Duplicates() {
               )}
               <button type="button" className="pbtn solid" disabled={ui.moving || scan.busy} onClick={() => (prefs?.confirmBeforeClean === false ? void moveToTrash() : set({ asking: true }))}>
                 {ui.moving ? <Spinner light size={16} /> : <Icon name="trash" size={16} />}
-                {ui.moving ? "Moving" : `Move ${count} ${copies} to Trash`}
+                {ui.moving ? "Moving" : `Move ${count} ${copies} to ${bin}`}
               </button>
             </PickedBar>
           )}
           {count > 0 && ui.asking && (
             <AskBar
               icon="trash"
-              title={`Move ${count} ${copies} (${formatBytes(doomedBytes)}) to Trash?`}
-              note="A copy of every file stays where it is, and the rest can be restored from the Trash."
-              yes="Move to Trash"
+              title={`Move ${count} ${copies} (${formatBytes(doomedBytes)}) to ${bin}?`}
+              note={`A copy of every file stays where it is, and the rest can be restored from the ${bin}.`}
+              yes={`Move to ${bin}`}
               yesDisabled={ui.moving}
               onNo={() => set({ asking: false })}
               onYes={() => void moveToTrash()}

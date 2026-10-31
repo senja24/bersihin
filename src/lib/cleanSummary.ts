@@ -22,9 +22,9 @@ export function cleanSummary(r: CleanResult): string {
   return [head, ...leftBehind(r, `${r.failed} in use, skipped`)].join(" - ");
 }
 
-/** The toast after moving files to the Trash, with its tone. */
-export function trashSummary(r: CleanResult, one: string, many: string): { text: string; tone: "ok" | "err" } {
-  const moved = `${r.removed} ${r.removed === 1 ? one : many} (${formatBytes(r.freed)}) to Trash`;
+/** The toast after moving files to the Trash (bin: "Recycle Bin" on Windows), with its tone. */
+export function trashSummary(r: CleanResult, one: string, many: string, bin = "Trash"): { text: string; tone: "ok" | "err" } {
+  const moved = `${r.removed} ${r.removed === 1 ? one : many} (${formatBytes(r.freed)}) to ${bin === "Trash" ? "Trash" : `the ${bin}`}`;
   const head = r.cancelled ? `Stopped early - moved ${moved}` : `Moved ${moved}`;
   const text = [head, ...leftBehind(r, `${r.failed} ${r.cancelled ? "not moved" : "could not be moved"}`)].join(" - ");
   return { text, tone: r.removed === 0 && (isPartial(r) || r.cancelled) ? "err" : "ok" };

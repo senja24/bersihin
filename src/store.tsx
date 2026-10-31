@@ -6,6 +6,7 @@ import { applyProgress, dropRun, dropTask, pick, type Slots } from "./lib/live";
 import { onRunEnd } from "./lib/runEnd";
 import { newRunId } from "./lib/runId";
 import { runSweep } from "./lib/sweep";
+import { parentOf, platformOf, within, type Platform } from "./lib/platform";
 import type { AiProvider, CleanResult, DiskInfo, JunkCategory, ScanProgress, ScanTask, Settings, SettingsPatch, SpaceNode, SystemInfo } from "./types";
 
 export type View =
@@ -149,7 +150,15 @@ export type AppState = Model &
     cleaning: boolean;
     /** What a single Clean press frees: the safe categories. */
     reclaimable: number;
+    /** The words and screens of the platform Go runs on (the Mac's until it has said). */
+    platform: Platform;
   };
+
+/** The screen behind a view that a platform may not have (see SystemInfo.unsupported). */
+const SCREEN_OF: Partial<Record<View, string>> = { applications: "applications", speed: "startup", protection: "protection" };
+
+/** Whether the platform has the view: Applications, Speed and Protection are macOS only for now. */
+export const hasView = (p: Platform, v: View) => !SCREEN_OF[v] || !p.unsupported.has(SCREEN_OF[v]!);
 
 const Ctx = createContext<AppState | null>(null);
 // Progress ticks arrive several times a second, so they live apart from the rest of the state.
@@ -291,6 +300,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [rescan, onProgress, forgetRun]);
 
   const reclaimable = useMemo(() => sumOf((model.junk ?? []).filter((c) => c.safe).map((c) => c.size)), [model.junk]);
+  const platform = useMemo(() => platformOf(model.machine), [model.machine]);
 
   const value = useMemo<AppState>(
     () => ({
@@ -298,9 +308,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       scanning: model.activity === "scanning",
       cleaning: model.activity === "cleaning",
       reclaimable,
+      platform,
+      // a screen the platform does not have is never shown: Smart Scan stands in
+      view: hasView(platform, model.view) ? model.view : "smart-scan",
       navigate, rescan, abort, remap, sweep, reloadDisks, afterChange, setPref, setKey, notify,
     }),
-    [model, reclaimable, navigate, rescan, abort, remap, sweep, reloadDisks, afterChange, setPref, setKey, notify],
+    [model, reclaimable, platform, navigate, rescan, abort, remap, sweep, reloadDisks, afterChange, setPref, setKey, notify],
   );
   return (
     <Ctx.Provider value={value}>
@@ -308,6 +321,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     </Ctx.Provider>
   );
 }
+
+/** The words and screens of the platform: "Trash" or "Recycle Bin", "Finder" or "File Explorer", "Mac" or "PC". */
+export const usePlatform = (): Platform => useApp().platform;
 
 export function useApp(): AppState {
   const value = useContext(Ctx);
@@ -326,11 +342,15 @@ export const useLiveRun = (id: string | undefined): ScanProgress | null => {
 
 /** Which volume a path is on, and the folder within it. Null inside the home folder. */
 export function volumeOf(path: string, home: string | undefined, volumes: DiskInfo[] | null): { name: string; dir: string } | null {
-  if (home && (path === home || path.startsWith(home + "/"))) return null;
+  if (home && within(home, path)) return null;
   const host = (volumes ?? [])
-    .filter((v) => v.mount === "/" || path.startsWith(v.mount + "/"))
+    .filter((v) => within(v.mount, path))
     .sort((a, b) => b.mount.length - a.mount.length)[0];
   if (!host) return null;
-  const folder = path.slice(0, path.lastIndexOf("/"));
-  return { name: host.label, dir: (host.mount === "/" ? folder : folder.slice(host.mount.length)) || "/" };
+  const folder = parentOf(path);
+  if (host.mount === "/") return { name: host.label, dir: folder || "/" };
+  // "D:\Games\a.iso" on "D:\" is in "\Games"; "/Volumes/Data/x/a" on "/Volumes/Data" in "/x"
+  const sep = host.mount.endsWith("\\") ? "\\" : "/";
+  const dir = within(folder, host.mount) ? sep : folder.slice(host.mount.replace(/[\\/]+$/, "").length);
+  return { name: host.label, dir: dir || sep };
 }

@@ -235,7 +235,7 @@ function DropKeyConfirm({ onCancel, onGo, busy }: { onCancel: () => void; onGo: 
 
 /** Address, model, key and a connection test for a Claude- or OpenAI-compatible service. */
 function EndpointEditor({ kind, endpoint }: { kind: CompatibleProvider; endpoint: AiEndpoint }) {
-  const { setPref } = useApp();
+  const { setPref, platform } = useApp();
   const meta = COMPAT[kind];
   const [st, set] = usePatch({ url: endpoint.baseUrl, model: endpoint.model, urlRev: 0, modelRev: 0, confirm: false, saving: "", error: "", keyBusy: false });
   const test = useConnectionTest(kind);
@@ -335,7 +335,7 @@ function EndpointEditor({ kind, endpoint }: { kind: CompatibleProvider; endpoint
                 if (e.key === "Escape") cancelUrl();
               }}
             />
-            <small>Include /v1 if your service uses it. http:// works only for this Mac (localhost).</small>
+            <small>Include /v1 if your service uses it. http:// works only for this {platform.computer} (localhost).</small>
           </label>
           <label className="ep-field">
             <b className="ep-label">
@@ -440,7 +440,7 @@ function OfficialModelEditor({ kind, saved, fallback }: { kind: "claude" | "chat
 }
 
 function Settings() {
-  const { prefs, setPref, machine, notify } = useApp();
+  const { prefs, setPref, machine, notify, platform } = useApp();
   const [saving, set] = usePatch<{ field: string | null }>({ field: null });
 
   const persist = async (field: string, change: Parameters<typeof setPref>[0]) => {
@@ -553,7 +553,7 @@ function Settings() {
               onChange={(l) => void persist("large", { largeFileMinMb: Number(l) })}
             />
           </div>
-          <p className="note">Caches and temporary files are removed permanently. Your own files always go to the Trash, where you can restore them.</p>
+          <p className="note">Caches and temporary files are removed permanently. Your own files always go to the {platform.trash}, where you can restore them.</p>
         </Section>
 
         <Section
@@ -583,7 +583,7 @@ function Settings() {
           )}
           <p className="privacy">
             <Icon name="shield" size={16} />
-            Only file names, paths and sizes leave your Mac {"—"} file contents never do.
+            Only file names, paths and sizes leave your {platform.computer} {"—"} file contents never do.
           </p>
           {isCompatible(prefs.aiProvider) && (
             <p className="privacy">
@@ -601,7 +601,7 @@ function Settings() {
               <p className="mono">{machine ? `Version ${machine.appVersion} · ${machine.osVersion} · ${machine.arch}` : "Reading version"}</p>
               <span className="made-with">
                 <Icon name="heart" size={14} />
-                Made with care, to keep your Mac light.
+                Made with care, to keep your {platform.computer} light.
               </span>
             </div>
           </div>

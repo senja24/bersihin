@@ -25,7 +25,10 @@ const normalizeUrl = (raw: string): string => {
 };
 const pause = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
-const MACHINE: SystemInfo = { platform: "darwin", arch: "arm64", osVersion: "macOS 15.3", appVersion: "0.1.0", homeDir: HOME };
+const MACHINE: SystemInfo = {
+  platform: "darwin", arch: "arm64", osVersion: "macOS 15.3", appVersion: "0.1.0", homeDir: HOME,
+  trashName: "Trash", fileManager: "Finder", unsupported: [],
+};
 
 const VOLUMES: DiskInfo[] = [
   { mount: "/", label: "Macintosh HD", total: 460 * GIB, used: 301 * GIB, free: 159 * GIB, system: true },

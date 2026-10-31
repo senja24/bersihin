@@ -5,7 +5,7 @@ import { Icon } from "../components/Icon";
 import { BigNumber, Empty, PageHead, Segmented, Spinner, Waiting, fraction } from "../components/ui";
 import { formatBytes, messageOf, splitBytes, tildePath } from "../lib/format";
 import { useIcons, usePatch } from "../lib/hooks";
-import { useApp, useLiveRun } from "../store";
+import { useApp, useLiveRun, usePlatform } from "../store";
 import type { DiskInfo, SpaceNode } from "../types";
 import "./lists.css";
 
@@ -52,6 +52,7 @@ interface SideProps {
 }
 
 function SidePanel({ folder, title, kids, focus, icons, home, onOpen, onReveal, onReview }: SideProps) {
+  const { fileManager } = usePlatform();
   const shownKids = kids.slice(0, 80);
   return (
     <aside className="glass side rise" style={{ animationDelay: "0.12s" }} aria-label="Folder contents">
@@ -60,7 +61,7 @@ function SidePanel({ folder, title, kids, focus, icons, home, onOpen, onReveal, 
           <h2>{title}</h2>
           <p title={folder.path}>{tildePath(folder.path, home)}</p>
         </div>
-        <button type="button" className="icon-btn" title="Show in Finder" aria-label="Show in Finder" onClick={() => onReveal(folder.path)}>
+        <button type="button" className="icon-btn" title={`Show in ${fileManager}`} aria-label={`Show in ${fileManager}`} onClick={() => onReveal(folder.path)}>
           <Icon name="reveal" size={16} />
         </button>
       </div>
@@ -123,8 +124,8 @@ function SidePanel({ folder, title, kids, focus, icons, home, onOpen, onReveal, 
                 <button
                   type="button"
                   className="icon-btn"
-                  title="Show in Finder"
-                  aria-label={`Show ${c.name} in Finder`}
+                  title={`Show in ${fileManager}`}
+                  aria-label={`Show ${c.name} in ${fileManager}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onReveal(c.path);

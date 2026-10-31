@@ -1,3 +1,5 @@
+import { isWinPath, leafOf, parentOf, within } from "./platform";
+
 const SCALE = ["B", "KB", "MB", "GB", "TB"] as const;
 
 /** Splits a byte count into a display number and its unit. */
@@ -39,9 +41,10 @@ export function timeAgo(when?: number | null, now = Date.now()): string {
 export const formatDate = (when?: number | null): string =>
   when ? new Date(when).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "-";
 
-/** Writes the home folder as ~. */
+/** Writes the home folder as ~ (~\Downloads on Windows, where names compare without case). */
 export function tildePath(path: string, home?: string): string {
   if (!home) return path;
+  if (isWinPath(home)) return within(home, path) ? "~" + path.slice(home.replace(/[\\/]+$/, "").length) : path;
   return path === home || path.startsWith(home + "/") ? "~" + path.slice(home.length) : path;
 }
 
@@ -54,8 +57,8 @@ export const countOf = (n: number, one: string, many: string) => `${n} ${n === 1
 /** The quiet line for items the safety rules kept out of a result, or null when nothing was kept out. */
 export const hiddenNote = (n: number, one: string, many: string) => (n > 0 ? `${countOf(n, one, many)} hidden by safety rules` : null);
 
-export const leafName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
-export const dirOf = (path: string) => path.replace(/\/[^/]*$/, "") || "/";
+export const leafName = leafOf;
+export const dirOf = parentOf;
 export const sumOf = (nums: number[]) => nums.reduce((acc, n) => acc + n, 0);
 export const wasCancelled = (err: unknown) => err instanceof Error && /cancel/i.test(err.message);
 export const messageOf = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);

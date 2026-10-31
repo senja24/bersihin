@@ -325,12 +325,24 @@ export interface StartupItem {
 
 /** SystemInfo describes the machine and the app. */
 export interface SystemInfo {
-  /** always "darwin" in a real build */
+  /** "darwin" or "windows" in a real build */
   platform: string;
   arch: string;
   osVersion: string;
   appVersion: string;
   homeDir: string;
+  /** TrashName is where moved files go: "Trash", or "Recycle Bin" on Windows. */
+  trashName: string;
+  /**
+   * FileManager is the app that reveals files: "Finder", or "File
+   * Explorer" on Windows.
+   */
+  fileManager: string;
+  /**
+   * Unsupported lists the screens this platform does not have yet
+   * ("applications", "startup", "protection" on Windows).
+   */
+  unsupported: string[];
 }
 
 /** UninstallResult is the outcome of uninstalling an app. */

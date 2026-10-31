@@ -1,4 +1,5 @@
 import type { AiContext } from "../types";
+import { isWinPath, within } from "./platform";
 
 const DATA_FIRMLINK = /^\/System\/Volumes\/Data(?=\/|$)/;
 const stripFirmlink = (p: string) => p.replace(DATA_FIRMLINK, "") || "/";
@@ -11,12 +12,24 @@ const hideUser = (p: string) => p.replace(/^\/Users\/[^/]+/, "/Users/…");
  * /System/Volumes/Data form) become /Users/…. Works the same when `home` is still unknown ("").
  */
 export function shortenPath(path: string, home: string): string {
+  if (isWinPath(path) || isWinPath(home)) return shortenWinPath(path, home);
   const p = stripFirmlink(path);
   const base = stripFirmlink(home).replace(/\/+$/, "");
   if (base && (p === base || p.startsWith(base + "/"))) return "~" + p.slice(base.length);
   const volume = /^\/Volumes\/([^/]+)(\/.*)?$/.exec(p);
   if (volume) return volume[1]! + hideUser((volume[2] ?? "").replace(/\/+$/, ""));
   return hideUser(p);
+}
+
+/**
+ * shortenPath for Windows: the profile as ~\ (names compare without case), and any other profile folder, on any
+ * drive, as X:\Users\….
+ */
+function shortenWinPath(path: string, home: string): string {
+  const p = path.replace(/\//g, "\\");
+  const base = home.replace(/\//g, "\\").replace(/\\+$/, "");
+  if (base && within(base, p)) return "~" + p.slice(base.length);
+  return p.replace(/^([A-Za-z]:\\Users\\)[^\\]+/i, "$1…");
 }
 
 /** Adds mappings from a shortened path to the real one; a short form that maps to two real paths becomes null (ambiguous). */

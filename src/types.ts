@@ -8,15 +8,21 @@ export type IconName =
   | "layers" | "lock" | "power" | "search" | "close" | "plus" | "reveal" | "spark" | "warning" | "clock";
 
 export type SystemInfo = {
-  platform: "darwin";
+  platform: "darwin" | "windows";
   arch: string;
   osVersion: string;
   appVersion: string;
   homeDir: string;
+  /** "Trash", or "Recycle Bin" on Windows */
+  trashName: string;
+  /** "Finder", or "File Explorer" on Windows */
+  fileManager: string;
+  /** screens the platform does not have yet ("applications", "startup", "protection" on Windows) */
+  unsupported: string[];
 };
 
 export type DiskInfo = {
-  mount: string; // "/" or "/Volumes/Backup"
+  mount: string; // "/" or "/Volumes/Backup"; "C:\\" or "D:\\" on Windows
   label: string; // "Macintosh HD"
   total: number;
   free: number;

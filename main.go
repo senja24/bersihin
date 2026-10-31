@@ -90,6 +90,8 @@ func main() {
 			BackgroundColor:      "#f2f3f6", // --color-paper in src/styles/tokens.css
 			TitleBarStyle:        mygo.TitleBarHidden,
 			TrafficLightPosition: &mygo.Point{X: 20, Y: 16},
+			// Windows: the window buttons fill the page's title bar, --titlebar-height
+			TitleBarHeight: 44,
 			// The frontend: devUrl during `mygo dev`, frontendDist
 			// embedded by `mygo build` otherwise (see mygo.config.ts).
 			URL: "/",
