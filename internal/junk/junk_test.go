@@ -24,7 +24,7 @@ func put(t *testing.T, p string, size int, age time.Duration) string {
 		t.Fatal(err)
 	}
 	ts := time.Now().Add(-age)
-	if err := os.Chtimes(p, ts, ts); err != nil {
+	if err := testenv.Chtimes(p, ts, ts); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -220,7 +220,7 @@ func populate(t *testing.T, f *fixture) {
 	put(t, f.p("Downloads", "mixed", "new.bin"), 100, time.Hour)
 	put(t, f.p("Downloads", "oldfolder", "a.bin"), 300, old)
 	put(t, f.p("Downloads", ".DS_Store"), 10, old)
-	if err := os.Chtimes(f.p("Downloads", "oldfolder"), time.Now().Add(-old), time.Now().Add(-old)); err != nil {
+	if err := testenv.Chtimes(f.p("Downloads", "oldfolder"), time.Now().Add(-old), time.Now().Add(-old)); err != nil {
 		t.Fatal(err)
 	}
 	// Cache folders were last changed long ago too (a folder changed within
@@ -241,7 +241,7 @@ func ageDirs(t *testing.T, root string) {
 		return nil
 	})
 	for i := len(dirs) - 1; i >= 0; i-- { // children first, so a parent keeps its time
-		os.Chtimes(dirs[i], ts, ts)
+		testenv.Chtimes(dirs[i], ts, ts)
 	}
 }
 

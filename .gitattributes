@@ -1,0 +1,3 @@
+# Go sources and the macOS tool output in testdata are compared byte for byte:
+# keep LF on a Windows checkout too.
+* text=auto eol=lf

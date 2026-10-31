@@ -40,6 +40,9 @@ func put(t *testing.T, p string, size int) {
 	// Sparse apart from the last byte: the size is what matters, but the file
 	// must own a block, or macOS (APFS) reports no blocks and the scan treats
 	// it as an iCloud placeholder.
+	if err := testenv.Sparse(f); err != nil {
+		t.Fatal(err)
+	}
 	if size > 0 {
 		if _, err := f.WriteAt([]byte{1}, int64(size)-1); err != nil {
 			t.Fatal(err)

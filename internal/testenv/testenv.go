@@ -6,8 +6,10 @@ package testenv
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 // Windows is true when the tests run on Windows.
@@ -80,4 +82,37 @@ func MacLayout(t testing.TB) {
 	if Windows {
 		t.Skip("expects the macOS categories and rules for a Mac home folder; Windows uses its own, tested on a Windows profile by the Windows tests")
 	}
+}
+
+// Chtimes is os.Chtimes that also makes the file as old as mtime on Windows:
+// there os.Chtimes leaves the creation time at now, which Bersihin reads as a
+// last use (a download's creation is when it arrived), while on macOS setting
+// the modification time before the birth time moves the birth time back.
+func Chtimes(name string, atime, mtime time.Time) error {
+	if err := os.Chtimes(name, atime, mtime); err != nil {
+		return err
+	}
+	return setCreation(name, mtime)
+}
+
+// Sparse marks f, just created, as a sparse file, so that writing far past
+// its end does not fill the gap with zeros: NTFS does for a file not marked,
+// and the large-file tests would write gigabytes. Elsewhere such a file is
+// sparse already.
+func Sparse(f *os.File) error { return sparse(f) }
+
+// TempDir is t.TempDir under its long name on Windows: %TEMP% may be an 8.3
+// short name (C:\Users\RUNNER~1\...), a spelling the Windows guard refuses,
+// as it must, since no rule lists it.
+func TempDir(t testing.TB) string {
+	t.Helper()
+	d := t.TempDir()
+	if !Windows {
+		return d
+	}
+	long, err := filepath.EvalSymlinks(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return long
 }

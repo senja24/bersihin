@@ -46,7 +46,7 @@ var treeTime = time.Now().Add(-old).Truncate(time.Millisecond)
 func setOld(t *testing.T, paths ...string) {
 	t.Helper()
 	for _, p := range paths {
-		if err := os.Chtimes(p, treeTime, treeTime); err != nil {
+		if err := testenv.Chtimes(p, treeTime, treeTime); err != nil {
 			t.Fatal(err)
 		}
 	}

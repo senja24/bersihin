@@ -16,13 +16,14 @@ import (
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/snapshot"
 	"dev.agus.bersihin/internal/sys"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 // at sets the access and modification time of p, given as ages.
 func at(t *testing.T, p string, atimeAge, mtimeAge time.Duration) {
 	t.Helper()
 	now := time.Now()
-	if err := os.Chtimes(p, now.Add(-atimeAge), now.Add(-mtimeAge)); err != nil {
+	if err := testenv.Chtimes(p, now.Add(-atimeAge), now.Add(-mtimeAge)); err != nil {
 		t.Fatal(err)
 	}
 }

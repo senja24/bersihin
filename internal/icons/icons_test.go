@@ -18,7 +18,7 @@ import (
 var pngBytes = []byte("\x89PNG\r\n\x1a\nfake")
 
 func TestIcons(t *testing.T) {
-	home := t.TempDir()
+	home := testenv.TempDir(t)
 	app := filepath.Join(home, "Applications", "Foo.app")
 	os.MkdirAll(app, 0o755)
 	doc := filepath.Join(home, "doc.pdf")
@@ -101,7 +101,7 @@ func TestTooManyPaths(t *testing.T) {
 }
 
 func TestSlowIconTimesOutAndIsNotCached(t *testing.T) {
-	dir := t.TempDir()
+	dir := testenv.TempDir(t)
 	f := filepath.Join(dir, "a.txt")
 	os.WriteFile(f, nil, 0o644)
 	release := make(chan struct{})
@@ -159,7 +159,7 @@ func TestCandidateIsCaseAndFormInsensitive(t *testing.T) {
 }
 
 func TestNegativeResultsAreCachedButTimeoutsAreNot(t *testing.T) {
-	dir := t.TempDir()
+	dir := testenv.TempDir(t)
 	f := filepath.Join(dir, "a.txt")
 	os.WriteFile(f, nil, 0o644)
 	var n atomic.Int32
@@ -173,7 +173,7 @@ func TestNegativeResultsAreCachedButTimeoutsAreNot(t *testing.T) {
 }
 
 func TestStuckLookupsAreBounded(t *testing.T) {
-	dir := t.TempDir()
+	dir := testenv.TempDir(t)
 	release := make(chan struct{})
 	defer close(release)
 	var started atomic.Int32

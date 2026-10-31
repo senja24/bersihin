@@ -213,7 +213,11 @@ func TestTrashPathsGoesThroughTheGuard(t *testing.T) {
 	a := filepath.Join(e.home, "Downloads", "a.zip")
 	put(t, a, 10, 0)
 	put(t, filepath.Join(e.home, ".ssh", "id_rsa"), 1, 0)
-	paths := []string{a, filepath.Join(e.home, ".ssh", "id_rsa"), e.home, "/etc/passwd"}
+	system := "/etc/passwd"
+	if testenv.Windows {
+		system = filepath.Join(os.Getenv("SystemRoot"), "win.ini")
+	}
+	paths := []string{a, filepath.Join(e.home, ".ssh", "id_rsa"), e.home, system}
 	res, err := e.trash(e.inject(t, paths...), paths)
 	if err != nil {
 		t.Fatal(err)

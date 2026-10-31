@@ -29,7 +29,7 @@ func put(t *testing.T, p string, size int, age time.Duration) int64 {
 		t.Fatal(err)
 	}
 	ts := time.Now().Add(-age)
-	os.Chtimes(p, ts, ts)
+	testenv.Chtimes(p, ts, ts)
 	fi, err := os.Stat(p)
 	if err != nil {
 		t.Fatal(err)
