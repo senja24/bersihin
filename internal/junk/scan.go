@@ -550,7 +550,12 @@ func (s *Scanner) cleanCache(ctx context.Context, def Def) tally {
 		}
 		list, err := os.ReadDir(root.Path)
 		if err != nil {
-			switch statusOf(err) {
+			st := statusOf(err)
+			// Windows reads a file where the folder should be as "path not found"
+			if st == descSkip && walk.Exists(root.Path) {
+				st = descFailed
+			}
+			switch st {
 			case descDenied:
 				t.denied++
 			case descFailed:
