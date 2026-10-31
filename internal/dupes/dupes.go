@@ -94,6 +94,12 @@ func Collect(ctx context.Context, roots []string, seen func(n int, dir string)) 
 				if !eligible(f) {
 					return
 				}
+				if f.Ino == 0 {
+					// Windows: the walk reads no file index, ask for this file's
+					if fi, err := walk.Lstat(f.Path); err == nil {
+						f.Dev, f.Ino = walk.Dev(fi), walk.Ino(fi)
+					}
+				}
 				if f.Ino != 0 {
 					key := [2]uint64{f.Dev, f.Ino}
 					if inodes[key] {

@@ -96,6 +96,7 @@ func (s *Scanner) measureCache(ctx context.Context, def Def, roots []Root, onTic
 		walk.Walk(ctx, root.Path, walk.Options{
 			MaxEntries: scanCap,
 			SameDevice: true,
+			Identity:   true, // the link counts
 			SkipDir: func(p, name string, depth int) bool {
 				return (depth == 1 && excluded[lower(name)]) || keptByRoot(root, p)
 			},
@@ -197,7 +198,7 @@ type assessed struct {
 // counts as in use.
 func (s *Scanner) assess(ctx context.Context, p string, cutoff int64) assessed {
 	a := assessed{path: p}
-	fi, err := os.Lstat(p)
+	fi, err := walk.Lstat(p)
 	if err != nil {
 		return a
 	}
@@ -225,6 +226,7 @@ func (s *Scanner) assess(ctx context.Context, p string, cutoff int64) assessed {
 		files := 0
 		st := walk.Walk(wctx, p, walk.Options{
 			MaxEntries: 200_000,
+			Identity:   true, // the status change times
 			OnDirInfo: func(dp string, _ int, di fs.FileInfo) {
 				if d := dirDev(dp, di); d != rootDev || d == 0 {
 					a.crossed = true
@@ -420,7 +422,7 @@ func (s *Scanner) trashEntries() map[string][2]uint64 {
 				continue
 			}
 			for _, e := range list {
-				if fi, err := os.Lstat(filepath.Join(root.Path, e.Name())); err == nil {
+				if fi, err := walk.Lstat(filepath.Join(root.Path, e.Name())); err == nil {
 					out[e.Name()] = [2]uint64{walk.Dev(fi), walk.Ino(fi)}
 				}
 			}
@@ -546,7 +548,7 @@ func (s *Scanner) sameAsScanned(root, name string) bool {
 	if !ok {
 		return false
 	}
-	fi, err := os.Lstat(filepath.Join(root, name))
+	fi, err := walk.Lstat(filepath.Join(root, name))
 	return err == nil && want == [2]uint64{walk.Dev(fi), walk.Ino(fi)}
 }
 

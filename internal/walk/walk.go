@@ -1,5 +1,5 @@
 // Package walk is a parallel, cancellable folder walker that never follows
-// symbolic links.
+// symbolic links (nor, on Windows, junctions and other reparse points).
 package walk
 
 import (
@@ -17,7 +17,9 @@ type Extra struct {
 	Nlink     uint64 // hard link count, 0 when unknown
 	Blocks    int64  // 512-byte blocks allocated
 	HasBlocks bool
-	// Dataless: macOS marks an iCloud placeholder with SF_DATALESS in st_flags.
+	// Dataless: macOS marks an iCloud placeholder with SF_DATALESS in st_flags;
+	// Windows marks a cloud file whose data is not local (OneDrive "online
+	// only") with the offline and recall attributes.
 	Dataless bool
 	ATime    int64 // epoch ms, 0 when unknown
 	BTime    int64 // epoch ms, 0 when unknown
@@ -74,7 +76,12 @@ type Options struct {
 	// SameDevice keeps the walk on the root's device: folders that are
 	// mount points of another volume are left out.
 	SameDevice bool
-	OnFile     func(File)
+	// Identity fills Dev, Ino, Nlink and CTime of every file where the
+	// platform needs a call per file for them (Windows opens each file for
+	// its attributes). Elsewhere they are always filled, and this changes
+	// nothing.
+	Identity bool
+	OnFile   func(File)
 	// OnDir is called for every real (non-link) folder below the root, before its contents.
 	OnDir func(path string, depth int)
 	// OnDirInfo is OnDir with the folder's own lstat result. It is not called
@@ -134,7 +141,7 @@ type walker struct {
 func Walk(ctx context.Context, root string, opt Options) Stats {
 	w := &walker{ctx: ctx, opt: opt, nextTick: tickEvery}
 	w.cond = sync.NewCond(&w.mu)
-	fi, err := os.Lstat(root)
+	fi, err := Lstat(root)
 	if err != nil {
 		return w.stats
 	}
@@ -146,7 +153,7 @@ func Walk(ctx context.Context, root string, opt Options) Stats {
 		if err != nil {
 			return w.stats
 		}
-		if fi, err = os.Lstat(real); err != nil {
+		if fi, err = Lstat(real); err != nil {
 			return w.stats
 		}
 		w.realRoot = real
@@ -233,13 +240,15 @@ func (w *walker) readDir(it item) {
 		full := filepath.Join(it.path, d.Name())
 		typ := d.Type()
 		switch {
-		case typ&fs.ModeSymlink != 0:
-			// links are never followed, and never reported
+		case typ&(fs.ModeSymlink|fs.ModeIrregular) != 0:
+			// links are never followed, and never reported; nor is any other
+			// reparse point (a Windows junction or mount point reads as
+			// irregular, and so does a cloud placeholder folder)
 		case typ.IsDir():
 			var fi fs.FileInfo
 			if w.opt.SameDevice || w.opt.OnDirInfo != nil {
 				var err error
-				if fi, err = d.Info(); err != nil {
+				if fi, err = dirInfo(full, d); err != nil {
 					w.noteUnreadable()
 					if w.opt.SameDevice {
 						continue
@@ -251,7 +260,7 @@ func (w *walker) readDir(it item) {
 			}
 			w.enterDir(full, d.Name(), depth, fi)
 		case typ.IsRegular():
-			fi, err := d.Info() // lstat: the entry itself
+			fi, err := fileInfo(full, d, w.opt.Identity) // lstat: the entry itself
 			if err != nil {
 				w.noteUnreadable()
 				continue
@@ -320,6 +329,14 @@ func (w *walker) addFile(p, name string, depth int, fi fs.FileInfo) {
 		w.opt.OnFile(f)
 	}
 }
+
+// Lstat is os.Lstat with the identity of the entry (Dev, Ino, Nlink and
+// CTime as read by this package) where os.Lstat does not carry it: on
+// Windows it opens the entry, without following a reparse point, for its
+// volume serial number, file index, link count and change time. Where that
+// fails the result has no identity (Dev 0), which callers treat as unknown.
+// Use it for the identity only: os.SameFile does not know its result.
+func Lstat(p string) (fs.FileInfo, error) { return lstat(p) }
 
 // Size is the total bytes of a file or folder, links not followed. It looks
 // at no more than 500,000 entries; beyond that the figure is a lower bound.

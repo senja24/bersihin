@@ -512,7 +512,7 @@ func NewResolver(g Guard) *Resolver {
 
 // devOf returns the device of p, 0 when unknown.
 func devOf(p string) uint64 {
-	if fi, err := os.Lstat(p); err == nil {
+	if fi, err := walk.Lstat(p); err == nil {
 		return walk.Dev(fi)
 	}
 	return 0

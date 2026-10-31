@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -28,7 +27,7 @@ type Trasher struct {
 // devOf is the device of the item at p, 0 when unknown. A variable so that
 // tests can stand in for a mount.
 var devOf = func(p string) uint64 {
-	if fi, err := os.Lstat(p); err == nil {
+	if fi, err := walk.Lstat(p); err == nil {
 		return walk.Dev(fi)
 	}
 	return 0
@@ -39,7 +38,7 @@ var devOf = func(p string) uint64 {
 // never enters such a folder, and the caller must not move p then: the
 // Trash move of a folder takes everything mounted in it along.
 func sizeOf(ctx context.Context, p string) (size int64, crossed bool) {
-	fi, err := os.Lstat(p)
+	fi, err := walk.Lstat(p)
 	if err != nil || !fi.IsDir() {
 		return walk.Size(ctx, p), false
 	}
@@ -84,7 +83,8 @@ type Identity struct {
 	Dir         bool
 }
 
-// IdentityOf reads the identity of fi.
+// IdentityOf reads the identity of fi, which must come from walk.Lstat for
+// Dev and Ino to be known on Windows.
 func IdentityOf(fi fs.FileInfo) Identity {
 	m, _, _ := walk.Times(fi)
 	return Identity{Dev: walk.Dev(fi), Ino: walk.Ino(fi), Size: fi.Size(), MTime: m}
@@ -184,7 +184,7 @@ func (t *Trasher) TrashChecked(ctx context.Context, paths []string, expect map[s
 		}
 		if expect != nil {
 			want, ok := expect[origin[p]]
-			fi, err := os.Lstat(p)
+			fi, err := walk.Lstat(p)
 			if !ok || err != nil || !want.matches(fi) {
 				changed++
 				continue

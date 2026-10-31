@@ -35,6 +35,12 @@ type Lister struct {
 	Home string
 	// Label names the system volume.
 	Label string
+	// SystemMount is where the system volume is mounted, default "/" (on
+	// Windows the home folder's drive, as C:\).
+	SystemMount string
+	// Drives, when set, lists the volumes instead of the mount table (on
+	// Windows, the drive letters). ok false marks a failed probe.
+	Drives func(ctx context.Context) (vols []Volume, ok bool)
 
 	// Stat returns the size of the volume holding path. Default: statfs.
 	Stat func(path string) (total, free int64, err error)
@@ -53,6 +59,19 @@ type Lister struct {
 type volume struct {
 	mount, label string
 	system       bool
+}
+
+// Volume is one entry of Lister.Drives.
+type Volume struct {
+	Mount, Label string
+	System       bool
+}
+
+func (l *Lister) systemMount() string {
+	if l.SystemMount != "" {
+		return l.SystemMount
+	}
+	return "/"
 }
 
 func (l *Lister) stat(p string) (int64, int64, error) {
@@ -115,6 +134,17 @@ func (l *Lister) volumes(ctx context.Context) []volume {
 }
 
 func (l *Lister) probe(ctx context.Context) ([]volume, bool) {
+	if l.Drives != nil {
+		list, ok := l.Drives(ctx)
+		var vols []volume
+		for _, v := range list {
+			vols = append(vols, volume{mount: v.Mount, label: v.Label, system: v.System})
+		}
+		if len(vols) == 0 {
+			vols = []volume{{mount: l.systemMount(), label: l.label(), system: true}}
+		}
+		return vols, ok
+	}
 	vols := []volume{{mount: "/", label: l.label(), system: true}}
 	if l.Run == nil {
 		return vols, true
@@ -209,7 +239,7 @@ func (l *Lister) System(context.Context) (model.DiskInfo, error) {
 	if err != nil {
 		return model.DiskInfo{}, err
 	}
-	return model.DiskInfo{Mount: "/", Label: l.label(), Total: total, Free: free, Used: max(0, total-free), System: true}, nil
+	return model.DiskInfo{Mount: l.systemMount(), Label: l.label(), Total: total, Free: free, Used: max(0, total-free), System: true}, nil
 }
 
 // DataMounts returns the mounts of fixed volumes other than the system one.
@@ -217,7 +247,7 @@ func (l *Lister) DataMounts(ctx context.Context) []string {
 	list, _ := l.List(ctx)
 	var out []string
 	for _, d := range list {
-		if !d.System && d.Mount != "/" {
+		if !d.System && d.Mount != l.systemMount() {
 			out = append(out, d.Mount)
 		}
 	}
