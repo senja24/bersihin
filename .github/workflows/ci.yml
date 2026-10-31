@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Vet
+        run: go vet ./...
+      - name: Build (amd64, arm64)
+        shell: bash
+        run: |
+          GOARCH=amd64 go build ./...
+          GOARCH=arm64 go build ./...
+      - name: Windows tests
+        # the junctions, identity, drives, Recycle Bin and safety rule tests, and the
+        # platform-neutral Windows rule tables
+        run: go test -count=1 -run Windows ./...
+      - name: Whole Go suite (informational)
+        # many older tests assume POSIX paths and symlinks; they are not ported yet
+        continue-on-error: true
+        run: go test -count=1 ./...
+      - name: Page checks
+        run: |
+          bun run typecheck
+          bun test
+      - name: Build the app
+        run: bun run build -- -platform windows/amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bersihin-windows-amd64
+          path: build/windows-amd64/
+          if-no-files-found: warn
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - run: bun run typecheck
+      - run: bun test

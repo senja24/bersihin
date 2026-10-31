@@ -45,28 +45,40 @@ func TestWindowsShapeOK(t *testing.T) {
 	}
 }
 
+// osPath spells "/C/Users/ika" in this OS's syntax: as it is on Unix,
+// "C:\Users\ika" on Windows (and "/D" as "D:\").
+func osPath(p string) string {
+	if filepath.Separator != '\\' {
+		return p
+	}
+	if len(p) == 2 {
+		return p[1:2] + `:\`
+	}
+	return p[1:2] + ":" + filepath.FromSlash(p[2:])
+}
+
 // The Windows rules, spelled in this OS's path syntax: the rules are data,
 // only the separator and drive letters are the OS's.
 func winGuard() (Guard, string) {
-	h := filepath.FromSlash("/C/Users/ika")
+	h := osPath("/C/Users/ika")
 	env := map[string]string{
-		"SystemDrive":  filepath.FromSlash("/C"),
-		"SystemRoot":   filepath.FromSlash("/C/Windows"),
-		"ProgramFiles": filepath.FromSlash("/C/Program Files"),
-		"ProgramData":  filepath.FromSlash("/C/ProgramData"),
-		"APPDATA":      filepath.FromSlash("/E/Profile/Roaming"),
+		"SystemDrive":  osPath("/C"),
+		"SystemRoot":   osPath("/C/Windows"),
+		"ProgramFiles": osPath("/C/Program Files"),
+		"ProgramData":  osPath("/C/ProgramData"),
+		"APPDATA":      osPath("/E/Profile/Roaming"),
 		"LOCALAPPDATA": filepath.Join(h, "AppData", "Local"),
-		"OneDrive":     filepath.FromSlash("/D/OneDrive"),
-		"PUBLIC":       "relative\\ignored",
+		"OneDrive":     osPath("/D/OneDrive"),
+		"PUBLIC":       "relative-ignored",
 	}
-	g := NewWindowsGuard(h, []string{filepath.FromSlash("/D"), filepath.FromSlash("/E")}, []string{filepath.FromSlash("/D/Docs")}, func(k string) string { return env[k] })
+	g := NewWindowsGuard(h, []string{osPath("/D"), osPath("/E")}, []string{osPath("/D/Docs")}, func(k string) string { return env[k] })
 	return g, h
 }
 
 func TestWindowsGuardRules(t *testing.T) {
 	g, h := winGuard()
 	j := func(p string) string { return filepath.Join(h, filepath.FromSlash(p)) }
-	d := filepath.FromSlash
+	d := osPath
 	for p, want := range map[string]bool{
 		// the user's own files
 		j("Videos/holiday.mkv"):          true,
@@ -115,11 +127,11 @@ func TestWindowsGuardIsCaseInsensitive(t *testing.T) {
 	if !g.Same(filepath.Join(h, "AppData"), filepath.Join(h, "APPDATA")) || !g.FoldCase || !g.Windows {
 		t.Fatal("the Windows guard must fold case")
 	}
-	up := filepath.FromSlash("/c/USERS/IKA/Videos/a.mkv")
+	up := osPath("/c/USERS/IKA/Videos/a.mkv")
 	if !g.Safe(up) {
 		t.Errorf("%s is the profile in another case", up)
 	}
-	if g.Safe(filepath.FromSlash("/c/USERS/IKA/.SSH/x")) || g.Safe(filepath.FromSlash("/d/onedrive/x")) {
+	if g.Safe(osPath("/c/USERS/IKA/.SSH/x")) || g.Safe(osPath("/d/onedrive/x")) {
 		t.Error("protected folders must match in any case")
 	}
 }
@@ -129,17 +141,20 @@ func TestWindowsRulesLeaveMacRulesAlone(t *testing.T) {
 	if g.Windows || g.Protected != nil || g.rules() != &macRules {
 		t.Fatal("NewGuard must keep the macOS rules")
 	}
+	if wg, _ := winGuard(); wg.rules() != &winRules {
+		t.Fatal("NewWindowsGuard must use the Windows rules")
+	}
+	if filepath.Separator == '\\' {
+		t.Skip("macOS paths")
+	}
 	// AppData means nothing on a Mac, Library does
 	if !g.Safe(home+"/AppData/x") || g.Safe(home+"/Library/x") {
 		t.Error("macOS rules changed")
 	}
-	if wg, _ := winGuard(); wg.rules() != &winRules {
-		t.Fatal("NewWindowsGuard must use the Windows rules")
-	}
 }
 
 func TestWindowsKnownFolders(t *testing.T) {
-	got := WindowsKnownFolders(filepath.FromSlash("/C/Users/ika"))
+	got := WindowsKnownFolders(osPath("/C/Users/ika"))
 	if len(got) != 6 || filepath.Base(got[4]) != "Videos" {
 		t.Fatalf("WindowsKnownFolders = %v", got)
 	}

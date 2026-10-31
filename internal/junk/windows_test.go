@@ -109,6 +109,9 @@ func TestWindowsDefsRoots(t *testing.T) {
 
 func TestWindowsDefsStayOutOfMicrosoftFolders(t *testing.T) {
 	home := filepath.FromSlash("/C/Users/ika")
+	if filepath.Separator == '\\' {
+		home = `C:\Users\ika`
+	}
 	local := filepath.Join(home, "AppData", "Local")
 	for p, want := range map[string]bool{
 		filepath.Join(local, "Temp"): true,
