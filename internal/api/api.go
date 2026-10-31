@@ -230,6 +230,8 @@ var errBadRequest = errors.New("Invalid request")
 func (c *core) systemInfo(ctx context.Context) model.SystemInfo {
 	info := model.SystemInfo{
 		Platform: runtime.GOOS, Arch: runtime.GOARCH, AppVersion: c.deps.AppVersion(), HomeDir: c.deps.Home,
+		TrashName: trash.BinName, FileManager: fileManager, Unsupported: unsupportedScreens(),
+		OSVersion: osVersion(),
 	}
 	if runtime.GOOS == "darwin" {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

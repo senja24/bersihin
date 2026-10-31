@@ -52,11 +52,19 @@ const (
 
 // SystemInfo describes the machine and the app.
 type SystemInfo struct {
-	Platform   string `json:"platform"` // always "darwin" in a real build
+	Platform   string `json:"platform"` // "darwin" or "windows" in a real build
 	Arch       string `json:"arch"`
 	OSVersion  string `json:"osVersion"`
 	AppVersion string `json:"appVersion"`
 	HomeDir    string `json:"homeDir"`
+	// TrashName is where moved files go: "Trash", or "Recycle Bin" on Windows.
+	TrashName string `json:"trashName"`
+	// FileManager is the app that reveals files: "Finder", or "File
+	// Explorer" on Windows.
+	FileManager string `json:"fileManager"`
+	// Unsupported lists the screens this platform does not have yet
+	// ("applications", "startup", "protection" on Windows).
+	Unsupported []string `json:"unsupported"`
 }
 
 // DiskInfo is one fixed local volume.

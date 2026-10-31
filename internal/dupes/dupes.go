@@ -45,7 +45,7 @@ type Entry struct {
 // that sits inside another.
 func Roots(home string) []string {
 	var all []string
-	for _, n := range []string{"Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music"} {
+	for _, n := range []string{"Desktop", "Documents", "Downloads", "Pictures", videos, "Music"} {
 		all = append(all, filepath.Join(home, n))
 	}
 	var out []string
