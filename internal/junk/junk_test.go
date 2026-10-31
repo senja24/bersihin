@@ -44,7 +44,8 @@ func newFixture(t *testing.T) *fixture {
 	os.MkdirAll(f.home, 0o755)
 	os.MkdirAll(f.outside, 0o755)
 	f.sc = &Scanner{
-		Home: f.home,
+		Home:     f.home,
+		Platform: "darwin", // the Mac's categories, on any OS
 		Trasher: &trash.Trasher{
 			Guard: func(context.Context) pathsafe.Guard {
 				g := pathsafe.NewGuard(f.home, nil)

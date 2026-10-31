@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -37,9 +38,30 @@ type Scanner struct {
 	// given files, 0 for a file that has none. An error means the dates could
 	// not be read, and the files are then kept.
 	LastUsed func(ctx context.Context, paths []string) (map[string]int64, error)
+	// Platform picks the categories: "windows" for WindowsDefs, anything
+	// else for Defs (the Mac's). Empty is the running OS.
+	Platform string
+	// Getenv reads the environment for WindowsDefs; default os.Getenv.
+	Getenv func(string) string
 	// ignoreCtime is for tests only: a status change time cannot be set back,
 	// so a test that needs an old entry has to leave it out.
 	ignoreCtime bool
+}
+
+// defs returns the categories of the platform.
+func (s *Scanner) defs() []Def {
+	platform := s.Platform
+	if platform == "" {
+		platform = runtime.GOOS
+	}
+	if platform == "windows" {
+		env := s.Getenv
+		if env == nil {
+			env = os.Getenv
+		}
+		return WindowsDefs(s.Home, env)
+	}
+	return Defs(s.Home)
 }
 
 func (s *Scanner) now() time.Time {
@@ -412,7 +434,7 @@ func (s *Scanner) Scan(ctx context.Context, rep progress.Reporter) ([]model.Junk
 // trashEntries lists the top-level entries of the Trash category's folders.
 func (s *Scanner) trashEntries() map[string][2]uint64 {
 	out := map[string][2]uint64{}
-	for _, def := range Defs(s.Home) {
+	for _, def := range s.defs() {
 		if def.ID != "trash" {
 			continue
 		}
@@ -448,7 +470,7 @@ type State struct {
 // ScanWithState is Scan that also returns the State of the scan.
 func (s *Scanner) ScanWithState(ctx context.Context, rep progress.Reporter) ([]model.JunkCategory, State, error) {
 	st := State{TrashEntries: s.trashEntries(), Downloads: map[string]snapshot.Seen{}}
-	defs := Defs(s.Home)
+	defs := s.defs()
 	found := []model.JunkCategory{}
 	for i, def := range defs {
 		if ctx.Err() != nil {
@@ -565,7 +587,7 @@ func files(n int, one, many string) string {
 // are always re-derived here.
 func (s *Scanner) Clean(ctx context.Context, ids []string, rep progress.Reporter) (model.CleanResult, error) {
 	var defs []Def
-	for _, d := range Defs(s.Home) {
+	for _, d := range s.defs() {
 		if slices.Contains(ids, d.ID) {
 			defs = append(defs, d)
 		}
@@ -610,7 +632,7 @@ func (s *Scanner) Clean(ctx context.Context, ids []string, rep progress.Reporter
 				res.Notes = append(res.Notes, "Old downloads: "+n)
 			}
 			if r.Removed > 0 {
-				res.Notes = append(res.Notes, "Old downloads went to the Trash, so you can restore them")
+				res.Notes = append(res.Notes, "Old downloads went to the "+trash.BinName+", so you can restore them")
 			}
 			continue
 		}

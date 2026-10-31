@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"dev.agus.bersihin/internal/pathsafe"
@@ -68,7 +67,7 @@ func classify(err error) unlinkResult {
 		return unlinkOK
 	case errors.Is(err, fs.ErrNotExist):
 		return unlinkGone
-	case errors.Is(err, syscall.EBUSY):
+	case isLocked(err):
 		return unlinkLocked
 	case strings.Contains(err.Error(), "escapes from parent"):
 		return unlinkEscaped
@@ -96,7 +95,7 @@ func statusOf(err error) descStatus {
 // removed records the result of removing an emptied folder: it stays when
 // something fresh or protected is inside (not empty) or it is already gone.
 func (o *Outcome) removed(err error) {
-	if err == nil || errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST) {
+	if err == nil || errors.Is(err, fs.ErrNotExist) || isNotEmpty(err) {
 		return
 	}
 	o.count(statusOf(err))
@@ -192,12 +191,14 @@ type deleter struct {
 	n       int
 }
 
-func (d *deleter) tally(res unlinkResult, fi fs.FileInfo) {
+// tally counts the result of removing a file whose lstat was fi and link
+// count (read before the removal, see linkCount) nlink.
+func (d *deleter) tally(res unlinkResult, fi fs.FileInfo, nlink uint64) {
 	switch res {
 	case unlinkOK:
 		// A name removed while another still points at the data frees nothing;
 		// an unknown link count (0) counts as shared.
-		if walk.Nlink(fi) == 1 {
+		if nlink == 1 {
 			d.out.Freed += fi.Size()
 		}
 		d.out.Removed++
@@ -279,7 +280,8 @@ func (d *deleter) clean(h *os.Root, top bool, rel string) {
 			if d.stopped() {
 				return
 			}
-			d.tally(classify(h.Remove(name)), info)
+			n := linkCount(h, name, info)
+			d.tally(classify(h.Remove(name)), info, n)
 		}
 	}
 }
@@ -322,6 +324,9 @@ func DeleteEntry(ctx context.Context, target, root string, opt DeleteOptions) Ou
 		out.count(statusOf(err))
 		return out
 	}
+	// On Windows a handle's lstat carries no device, so rootDev and every
+	// Dev below are 0: there another volume can only be mounted at a
+	// reparse point, which reads as irregular and is never entered.
 	rootDev := walk.Dev(rootInfo)
 
 	// down to the parent of the target, one checked handle per level
@@ -368,7 +373,8 @@ func DeleteEntry(ctx context.Context, target, root string, opt DeleteOptions) Ou
 		return refuse()
 	case fi.Mode().IsRegular():
 		if !d.fresh(fi) {
-			d.tally(classify(h.Remove(name)), fi)
+			n := linkCount(h, name, fi)
+			d.tally(classify(h.Remove(name)), fi, n)
 		}
 	case fi.IsDir():
 		if walk.Dev(fi) != rootDev {

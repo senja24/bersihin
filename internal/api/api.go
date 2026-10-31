@@ -177,7 +177,7 @@ func newCore(d Deps) *core {
 		Guard: func(ctx context.Context) pathsafe.Guard {
 			return pathsafe.ForPlatform(d.Home, c.disks.DataMounts(ctx))
 		},
-		Move: d.Shell.TrashItem,
+		Move: trash.RecycleOnly(d.Shell.TrashItem),
 	}
 	c.icons = &icons.Provider{
 		Home:        d.Home,

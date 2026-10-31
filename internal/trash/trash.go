@@ -1,5 +1,6 @@
-// Package trash moves the user's own files to the system Trash, behind the
-// path safety check. Nothing here deletes anything for good.
+// Package trash moves the user's own files to the system Trash (the Recycle
+// Bin on Windows), behind the path safety check. Nothing here deletes
+// anything for good.
 package trash
 
 import (
@@ -19,8 +20,11 @@ import (
 type Trasher struct {
 	// Guard returns the rules for this call (data volumes may change).
 	Guard func(ctx context.Context) pathsafe.Guard
-	// Move puts one canonical path in the Trash (Shell.TrashItem). It must
-	// fail, and leave the item alone, when the item cannot be trashed.
+	// Move puts one canonical path in the Trash (Shell.TrashItem; on Windows
+	// wrapped in RecycleOnly). It must fail, and leave the item alone, when
+	// the item cannot be trashed: MyGo's Windows TrashItem recycles through
+	// IFileOperation with FOF_ALLOWUNDO and refuses any delete that would
+	// not go to the Recycle Bin.
 	Move func(path string) error
 }
 
@@ -56,7 +60,9 @@ func sizeOf(ctx context.Context, p string) (size int64, crossed bool) {
 	return st.Bytes, crossed
 }
 
-var lockedRe = regexp.MustCompile(`(?i)in use|busy|being used|locked|sharing violation`)
+// lockedRe matches the errors of an item held open by another app; on
+// Windows the shell reports a sharing or lock violation as an HRESULT.
+var lockedRe = regexp.MustCompile(`(?i)in use|busy|being used|locked|sharing violation|HRESULT 0x8007002[01]\b`)
 
 func commas(n int) string {
 	s := strconv.Itoa(n)
@@ -211,7 +217,7 @@ func (t *Trasher) TrashChecked(ctx context.Context, paths []string, expect map[s
 		res.Skipped = append(res.Skipped, fmt.Sprintf("%s blocked for safety", plural(blocked, "item", "items")))
 	}
 	if errs > 0 {
-		res.Skipped = append(res.Skipped, fmt.Sprintf("%s could not be moved to the Trash", plural(errs, "item", "items")))
+		res.Skipped = append(res.Skipped, fmt.Sprintf("%s could not be moved to the %s", plural(errs, "item", "items"), BinName))
 	}
 	if changed > 0 {
 		res.Skipped = append(res.Skipped, fmt.Sprintf("%s changed before %s moved", plural(changed, "file", "files"), map[bool]string{true: "it was", false: "they were"}[changed == 1]))
