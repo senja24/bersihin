@@ -117,3 +117,15 @@ func TestWindowsScriptReadsOnly(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestWindowsBitLockerStates(t *testing.T) {
+	for v, want := range map[int]*bool{1: ptr(true), 3: ptr(true), 6: ptr(true), 2: ptr(false), 4: ptr(false), 5: ptr(false), 8: ptr(false), 0: nil} {
+		got, detail := bitLocker(&v)
+		if (got == nil) != (want == nil) || (got != nil && *got != *want) || detail == "" {
+			t.Errorf("state %d: %v %q", v, got, detail)
+		}
+	}
+	if got, _ := bitLocker(nil); got != nil {
+		t.Error("unread state reported")
+	}
+}

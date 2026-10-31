@@ -270,6 +270,12 @@ func (m *Manager) winSources() []winSource {
 
 // listWindows is List on Windows.
 func (m *Manager) listWindows(ctx context.Context) ([]model.StartupItem, error) {
+	return m.listWindowsTasks(ctx, true)
+}
+
+// listWindowsTasks lists the items, the logon tasks only when tasks is set:
+// they are read-only, so a toggle's own checks need not run schtasks.
+func (m *Manager) listWindowsTasks(ctx context.Context, tasks bool) ([]model.StartupItem, error) {
 	var items []model.StartupItem
 	targets := map[string]winTarget{}
 	add := func(got []model.StartupItem, tgts map[string]winTarget) {
@@ -289,7 +295,7 @@ func (m *Manager) listWindows(ctx context.Context) ([]model.StartupItem, error) 
 	add(m.runItems(src[2], runKey32))
 	add(m.folderItems(src[3], m.Win.UserFolder))
 	add(m.folderItems(src[4], m.Win.CommonFolder))
-	if m.Win.Tasks != nil {
+	if tasks && m.Win.Tasks != nil {
 		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		out, err := m.Win.Tasks(cctx)
 		cancel()
@@ -310,7 +316,7 @@ func (m *Manager) listWindows(ctx context.Context) ([]model.StartupItem, error) 
 // reads the list again to check the item now has that state.
 func (m *Manager) setWindows(ctx context.Context, id string, enabled bool) ([]model.StartupItem, error) {
 	// the item must still be there as listed: List refreshes the table
-	if _, err := m.listWindows(ctx); err != nil {
+	if _, err := m.listWindowsTasks(ctx, false); err != nil {
 		return nil, err
 	}
 	m.mu.Lock()

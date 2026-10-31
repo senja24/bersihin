@@ -236,6 +236,10 @@ func bitLocker(v *int) (*bool, string) {
 		return ptr(false), "BitLocker is decrypting the system drive"
 	case 5:
 		return ptr(false), "BitLocker protection of the system drive is suspended"
+	case 6:
+		return ptr(true), "BitLocker protects the system drive (locked)"
+	case 8:
+		return ptr(false), "BitLocker is waiting for activation: the system drive is encrypted, but its key is not protected yet"
 	}
 	return nil, "BitLocker is not available on this PC"
 }

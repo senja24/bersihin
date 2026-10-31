@@ -44,7 +44,7 @@ type winProgram struct {
 	winTarget
 	version, publisher, location, icon string
 	size, installed                    int64
-	command                            string // UninstallString, else QuietUninstallString
+	command                            string // UninstallString
 	locked                             bool
 }
 
@@ -80,10 +80,9 @@ func readProgram(reg winreg.Registry, root winreg.Root, key string) (winProgram,
 		p.size = int64(kb) * 1024
 	}
 	p.installed = installDate(winreg.Str(v, "InstallDate"))
+	// only UninstallString, as Settings: QuietUninstallString would remove the
+	// program with no window of its own, so an entry with only that is locked
 	p.command = winreg.Str(v, "UninstallString")
-	if strings.TrimSpace(p.command) == "" {
-		p.command = winreg.Str(v, "QuietUninstallString")
-	}
 	noRemove, _ := winreg.Num(v, "NoRemove")
 	p.locked = noRemove == 1 || windowsParts.MatchString(p.name)
 	return p, true

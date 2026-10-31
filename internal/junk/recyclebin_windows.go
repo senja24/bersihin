@@ -37,7 +37,7 @@ var systemBin RecycleBin = shellBin{}
 // Query sums the Recycle Bins of every drive (a nil root path).
 func (shellBin) Query() (BinSize, error) {
 	info := shQueryRBInfo{cbSize: uint32(unsafe.Sizeof(shQueryRBInfo{}))}
-	if hr, _, _ := procSHQueryRecycleBin.Call(0, uintptr(unsafe.Pointer(&info))); hr != 0 {
+	if hr, _, _ := procSHQueryRecycleBin.Call(0, uintptr(unsafe.Pointer(&info))); uint32(hr) != 0 { // an HRESULT is 32 bits
 		return BinSize{}, fmt.Errorf("SHQueryRecycleBinW: 0x%08x", uint32(hr))
 	}
 	return BinSize{Size: info.size, Items: info.numItems}, nil
@@ -46,7 +46,7 @@ func (shellBin) Query() (BinSize, error) {
 // Empty empties the Recycle Bins of every drive. The user confirmed in the
 // app, so the shell's own dialog, progress and sound are left out.
 func (shellBin) Empty() error {
-	if hr, _, _ := procSHEmptyRecycleBin.Call(0, 0, sherbNoConfirmation|sherbNoProgressUI|sherbNoSound); hr != 0 {
+	if hr, _, _ := procSHEmptyRecycleBin.Call(0, 0, sherbNoConfirmation|sherbNoProgressUI|sherbNoSound); uint32(hr) != 0 {
 		return fmt.Errorf("SHEmptyRecycleBinW: 0x%08x", uint32(hr))
 	}
 	return nil

@@ -98,7 +98,7 @@ func TestWindowsListPrograms(t *testing.T) {
 		t.Fatalf("vlc = %+v", vlc)
 	}
 	for name, can := range map[string]bool{
-		"Old Tool": true, "Spotify": true, "Quiet Only": true,
+		"Old Tool": true, "Spotify": true, "Quiet Only": false,
 		"Microsoft Visual C++ 2022 X64 Minimum Runtime": false, "Locked App": false, "No Command": false,
 	} {
 		if got[name].CanUninstall != can {
