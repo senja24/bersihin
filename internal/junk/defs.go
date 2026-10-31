@@ -25,6 +25,9 @@ const (
 	KindCache Kind = iota
 	// KindDownloads entries go to the Trash.
 	KindDownloads
+	// KindRecycleBin empties the Windows Recycle Bin of every drive through
+	// the shell (Scanner.RecycleBin), which deletes its items for good.
+	KindRecycleBin
 )
 
 // Root is a folder whose entries a category cleans.

@@ -1,5 +1,5 @@
 import { formatBytes } from "../lib/format";
-import { useApp, type View } from "../store";
+import { hasView, useApp, type View } from "../store";
 import type { DiskInfo, IconName } from "../types";
 import { BrandMark, Icon } from "./Icon";
 
@@ -72,7 +72,7 @@ export const Sidebar = () => {
         <BrandMark />
         <span>Bersihin</span>
       </div>
-      {TOP.map(entry)}
+      {TOP.filter(([id]) => hasView(app.platform, id)).map(entry)}
       <div className="nav-group">FILES</div>
       {FILE_TOOLS.map(entry)}
 

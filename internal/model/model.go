@@ -52,11 +52,19 @@ const (
 
 // SystemInfo describes the machine and the app.
 type SystemInfo struct {
-	Platform   string `json:"platform"` // always "darwin" in a real build
+	Platform   string `json:"platform"` // "darwin" or "windows" in a real build
 	Arch       string `json:"arch"`
 	OSVersion  string `json:"osVersion"`
 	AppVersion string `json:"appVersion"`
 	HomeDir    string `json:"homeDir"`
+	// TrashName is where moved files go: "Trash", or "Recycle Bin" on Windows.
+	TrashName string `json:"trashName"`
+	// FileManager is the app that reveals files: "Finder", or "File
+	// Explorer" on Windows.
+	FileManager string `json:"fileManager"`
+	// Unsupported lists the screens this platform does not have yet
+	// ("applications", "startup", "protection" on Windows).
+	Unsupported []string `json:"unsupported"`
 }
 
 // DiskInfo is one fixed local volume.
@@ -242,9 +250,12 @@ type InstalledApp struct {
 type UninstallResult struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message"`
+	// Pending is true when an uninstaller was started (Windows) rather than
+	// the app removed: it may still be cancelled, so the app stays listed.
+	Pending bool `json:"pending,omitempty"`
 }
 
-// ProtectionStatus summarises the Mac's built-in protection.
+// ProtectionStatus summarises the system's built-in protection.
 type ProtectionStatus struct {
 	Provider           string   `json:"provider"` // "XProtect + Gatekeeper"
 	Enabled            bool     `json:"enabled"`
@@ -254,6 +265,17 @@ type ProtectionStatus struct {
 	LastScan           *int64   `json:"lastScan"`
 	Score              int      `json:"score"` // 0..100
 	Notes              []string `json:"notes"`
+	// Checks are further read-only checks of the platform, such as
+	// SmartScreen and BitLocker on Windows. Empty on a Mac.
+	Checks []ProtectionCheck `json:"checks,omitempty"`
+}
+
+// ProtectionCheck is one more protection setting, as read.
+type ProtectionCheck struct {
+	Label  string `json:"label"`
+	Detail string `json:"detail"`
+	// On is nil when it could not be read.
+	On *bool `json:"on"`
 }
 
 // AiProvider selects the assistant's backend.

@@ -10,7 +10,6 @@ package recheck
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 
 	"dev.agus.bersihin/internal/model"
@@ -53,7 +52,7 @@ func same(p string, size, mtime int64) bool {
 }
 
 func stat(p string, size, mtime int64) (trash.Identity, bool) {
-	fi, err := os.Lstat(p)
+	fi, err := walk.Lstat(p)
 	if err != nil || !fi.Mode().IsRegular() || fi.Size() != size {
 		return trash.Identity{}, false
 	}

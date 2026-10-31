@@ -224,6 +224,14 @@ export interface LargeScan {
   hidden: number;
 }
 
+/** ProtectionCheck is one more protection setting, as read. */
+export interface ProtectionCheck {
+  label: string;
+  detail: string;
+  /** On is nil when it could not be read. */
+  on: boolean | null;
+}
+
 /** ProtectionStatus summarises the Mac's built-in protection. */
 export interface ProtectionStatus {
   /** "XProtect + Gatekeeper" */
@@ -236,6 +244,11 @@ export interface ProtectionStatus {
   /** 0..100 */
   score: number;
   notes: string[];
+  /**
+   * Checks are further read-only checks of the platform, such as
+   * SmartScreen and BitLocker on Windows. Empty on a Mac.
+   */
+  checks?: ProtectionCheck[];
 }
 
 /** ScanProgress is the payload of the "progress" event. */
@@ -325,18 +338,35 @@ export interface StartupItem {
 
 /** SystemInfo describes the machine and the app. */
 export interface SystemInfo {
-  /** always "darwin" in a real build */
+  /** "darwin" or "windows" in a real build */
   platform: string;
   arch: string;
   osVersion: string;
   appVersion: string;
   homeDir: string;
+  /** TrashName is where moved files go: "Trash", or "Recycle Bin" on Windows. */
+  trashName: string;
+  /**
+   * FileManager is the app that reveals files: "Finder", or "File
+   * Explorer" on Windows.
+   */
+  fileManager: string;
+  /**
+   * Unsupported lists the screens this platform does not have yet
+   * ("applications", "startup", "protection" on Windows).
+   */
+  unsupported: string[];
 }
 
 /** UninstallResult is the outcome of uninstalling an app. */
 export interface UninstallResult {
   ok: boolean;
   message: string;
+  /**
+   * Pending is true when an uninstaller was started (Windows) rather than
+   * the app removed: it may still be cancelled, so the app stays listed.
+   */
+  pending?: boolean;
 }
 
 /** Verdict is the assistant's opinion on removing a path. */

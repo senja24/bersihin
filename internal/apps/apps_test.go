@@ -12,6 +12,7 @@ import (
 
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/sys"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 type fixture struct {
@@ -168,7 +169,7 @@ func TestUninstallRefusals(t *testing.T) {
 	// the bundle is swapped for a link after listing
 	os.RemoveAll(sp.Path)
 	outside := t.TempDir()
-	os.Symlink(outside, sp.Path)
+	testenv.Symlink(t, outside, sp.Path)
 	if r := f.m.Uninstall(context.Background(), sp.ID); r.OK || len(f.trashed) != 0 {
 		t.Fatalf("link accepted: %+v trashed %v", r, f.trashed)
 	}

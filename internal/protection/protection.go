@@ -1,5 +1,6 @@
-// Package protection reads the Mac's built-in protection: Gatekeeper,
-// XProtect, System Integrity Protection and the application firewall.
+// Package protection reads the built-in protection: on a Mac Gatekeeper,
+// XProtect, System Integrity Protection and the application firewall; on
+// Windows what Windows Security shows (see windows.go). It never changes any.
 package protection
 
 import (
@@ -28,6 +29,9 @@ type Checker struct {
 	// ModTime returns when a file was last modified; default os.Stat.
 	ModTime func(path string) (time.Time, error)
 	Now     func() time.Time
+	// Windows, when set, makes this the Windows Checker: it runs
+	// WindowsScript and returns what it printed (see windows.go).
+	Windows winRun
 }
 
 func (c *Checker) now() time.Time {
@@ -120,6 +124,9 @@ func isTrue(b *bool) bool { return b != nil && *b }
 
 // Status reads Gatekeeper, the firewall, SIP and XProtect and scores them.
 func (c *Checker) Status(ctx context.Context) model.ProtectionStatus {
+	if c.Windows != nil {
+		return c.windowsStatus(ctx)
+	}
 	if c.Run == nil {
 		return unknown()
 	}

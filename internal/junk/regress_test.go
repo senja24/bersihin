@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"dev.agus.bersihin/internal/testenv"
 )
 
 // A parent of the junk root is swapped for a link after the roots were chosen.
@@ -18,7 +20,7 @@ func TestParentOfRootSwappedForLink(t *testing.T) {
 	os.MkdirAll(root, 0o755)
 	// Defs() accepted the root; now the attacker swaps its parent
 	os.RemoveAll(google)
-	os.Symlink(filepath.Join(f.outside, "precious"), google)
+	testenv.Symlink(t, filepath.Join(f.outside, "precious"), google)
 
 	out := DeleteEntry(context.Background(), filepath.Join(root, "mail.db"), root, DeleteOptions{Home: f.home})
 	if out.Removed != 0 || !out.Refused {
@@ -61,7 +63,7 @@ func TestFolderSwappedMidDelete(t *testing.T) {
 	afterScan = func() {
 		sub := filepath.Join(root, "app", "sub")
 		os.RemoveAll(sub)
-		if err := os.Symlink(victim, sub); err != nil {
+		if err := testenv.Symlink(t, victim, sub); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -87,7 +89,7 @@ func TestRootSwappedMidDelete(t *testing.T) {
 
 	afterScan = func() {
 		os.Rename(root, moved)
-		os.Symlink(victim, root)
+		testenv.Symlink(t, victim, root)
 	}
 	defer func() { afterScan = func() {} }()
 	DeleteEntry(context.Background(), filepath.Join(root, "app"), root, DeleteOptions{Home: f.home})
@@ -133,7 +135,7 @@ func TestInRootLinkCannotReachExcludedSibling(t *testing.T) {
 	afterScan = func() {
 		sub := filepath.Join(root, "app", "sub")
 		os.RemoveAll(sub)
-		os.Symlink("../CloudKit", sub)
+		testenv.Symlink(t, "../CloudKit", sub)
 	}
 	defer func() { afterScan = func() {} }()
 	out := DeleteEntry(context.Background(), filepath.Join(root, "app"), root, DeleteOptions{Home: f.home})
@@ -149,7 +151,7 @@ func TestDeepTargetThroughLinkedMiddleIsRefused(t *testing.T) {
 	f := newFixture(t)
 	root := f.p("Library", "Caches")
 	put(t, filepath.Join(root, "real", "deep", "x"), 1, old)
-	os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "alias"))
+	testenv.Symlink(t, filepath.Join(root, "real"), filepath.Join(root, "alias"))
 	out := DeleteEntry(context.Background(), filepath.Join(root, "alias", "deep"), root, DeleteOptions{Home: f.home})
 	if !out.Refused || !exists(filepath.Join(root, "real", "deep", "x")) {
 		t.Fatalf("out = %+v", out)
@@ -166,7 +168,7 @@ func TestLinkAsTargetIsRefused(t *testing.T) {
 	root := f.p("Library", "Caches")
 	put(t, filepath.Join(f.outside, "d", "x"), 1, old)
 	os.MkdirAll(root, 0o755)
-	os.Symlink(filepath.Join(f.outside, "d"), filepath.Join(root, "l"))
+	testenv.Symlink(t, filepath.Join(f.outside, "d"), filepath.Join(root, "l"))
 	if out := DeleteEntry(context.Background(), filepath.Join(root, "l"), root, DeleteOptions{Home: f.home}); !out.Refused || !exists(filepath.Join(f.outside, "d", "x")) {
 		t.Fatalf("out = %+v", out)
 	}

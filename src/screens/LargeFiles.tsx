@@ -8,7 +8,7 @@ import { isConfirmError, isScanExpired } from "../lib/confirm";
 import { dirOf, formatBytes, countOf, hiddenNote, messageOf, splitBytes, sumOf, tildePath, timeAgo, wasCancelled } from "../lib/format";
 import { useCachedScan, useChoice, useIcons, usePatch } from "../lib/hooks";
 import { createSingleFlight } from "../lib/singleFlight";
-import { useApp, useLive, volumeOf } from "../store";
+import { useApp, useLive, usePlatform, volumeOf } from "../store";
 import type { DiskInfo, IconName, LargeFile } from "../types";
 import "./lists.css";
 
@@ -38,6 +38,7 @@ interface FileRowProps {
 }
 
 const FileRow = memo(function FileRow({ file, on, locked, home, volumes, icon, onFlip, onReveal }: FileRowProps) {
+  const { fileManager } = usePlatform();
   const vol = volumeOf(file.path, home, volumes);
   const wasOpened = file.accessed > 0 && file.accessed >= file.modified;
   return (
@@ -74,8 +75,8 @@ const FileRow = memo(function FileRow({ file, on, locked, home, volumes, icon, o
       <button
         type="button"
         className="icon-btn"
-        title="Show in Finder"
-        aria-label={`Show ${file.name} in Finder`}
+        title={`Show in ${fileManager}`}
+        aria-label={`Show ${file.name} in ${fileManager}`}
         onClick={(e) => {
           e.preventDefault();
           onReveal(file.path);
@@ -89,6 +90,7 @@ const FileRow = memo(function FileRow({ file, on, locked, home, volumes, icon, o
 
 function LargeFiles() {
   const app = useApp();
+  const bin = app.platform.trash;
   const { prefs, machine, volumes, notify } = app;
   const scanLive = useLive("large");
   const threshold = prefs ? prefs.largeFileMinMb * MIB : null;
@@ -149,7 +151,7 @@ function LargeFiles() {
     const paths = picked.map((f) => f.path);
     try {
       const res = await api.trashPaths(scanId, paths);
-      const out = trashSummary(res, "file", "files");
+      const out = trashSummary(res, "file", "files", bin);
       notify(out.text, out.tone);
       if (isPartial(res) || res.cancelled) {
         // something stayed or the run was stopped: only a new look shows what is really left
@@ -167,13 +169,13 @@ function LargeFiles() {
         picks.reset();
         void scan.rerun();
       } else if (isConfirmError(e)) {
-        notify("The confirmation ran out. Choose Move to Trash again", "err");
+        notify(`The confirmation ran out. Choose Move to ${bin} again`, "err");
       } else if (wasCancelled(e)) {
         notify("Moving stopped");
         app.afterChange();
         void scan.rerun();
       } else {
-        notify(messageOf(e, "Could not move files to Trash"), "err");
+        notify(messageOf(e, `Could not move files to ${bin}`), "err");
       }
     } finally {
       set({ moving: false });
@@ -186,7 +188,7 @@ function LargeFiles() {
 
   return (
     <div className="screen">
-      <PageHead title="Large Files" sub={`Files above ${limitText} you might have forgotten${multiVolume ? ", across all your drives" : ""}. Whatever you remove goes to the Trash.`}>
+      <PageHead title="Large Files" sub={`Files above ${limitText} you might have forgotten${multiVolume ? ", across all your drives" : ""}. Whatever you remove goes to the ${bin}.`}>
         {files && hasFiles && (
           <div className="head-stat">
             <span>{countOf(files.length, "file", "files")}</span>
@@ -286,7 +288,7 @@ function LargeFiles() {
           </section>
 
           {picked.length > 0 && !ui.asking && (
-            <PickedBar bytes={pickedBytes} caption={`${picked.length} ${plural} · goes to Trash, restorable`}>
+            <PickedBar bytes={pickedBytes} caption={`${picked.length} ${plural} · goes to ${bin}, restorable`}>
               {ui.moving ? (
                 <button type="button" className="pbtn quiet" onClick={() => app.abort(["trash"])}>
                   Stop
@@ -298,16 +300,16 @@ function LargeFiles() {
               )}
               <button type="button" className="pbtn solid" disabled={ui.moving || scan.busy} onClick={press}>
                 {ui.moving ? <Spinner light size={16} /> : <Icon name="trash" size={16} />}
-                {ui.moving ? "Moving" : "Move to Trash"}
+                {ui.moving ? "Moving" : `Move to ${bin}`}
               </button>
             </PickedBar>
           )}
           {picked.length > 0 && ui.asking && (
             <AskBar
               icon="trash"
-              title={`Move ${picked.length} ${plural} (${formatBytes(pickedBytes)}) to Trash?`}
-              note="They stay restorable until the Trash is emptied."
-              yes="Move to Trash"
+              title={`Move ${picked.length} ${plural} (${formatBytes(pickedBytes)}) to ${bin}?`}
+              note={`They stay restorable until the ${bin} is emptied.`}
+              yes={`Move to ${bin}`}
               yesDisabled={ui.moving}
               onNo={() => set({ asking: false })}
               onYes={() => void moveToTrash()}

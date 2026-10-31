@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -37,9 +38,37 @@ type Scanner struct {
 	// given files, 0 for a file that has none. An error means the dates could
 	// not be read, and the files are then kept.
 	LastUsed func(ctx context.Context, paths []string) (map[string]int64, error)
+	// Platform picks the categories: "windows" for WindowsDefs, anything
+	// else for Defs (the Mac's). Empty is the running OS.
+	Platform string
+	// Getenv reads the environment for WindowsDefs; default os.Getenv.
+	Getenv func(string) string
+	// RecycleBin measures and empties the Windows Recycle Bin; default the
+	// shell's on Windows, none elsewhere (the category then finds nothing).
+	RecycleBin RecycleBin
+	// RecycleSeen, when not nil, is the Recycle Bin as a scan saw it: a clean
+	// empties it only if it holds no more than that, so nothing deleted
+	// since the scan is erased with it.
+	RecycleSeen *BinSize
 	// ignoreCtime is for tests only: a status change time cannot be set back,
 	// so a test that needs an old entry has to leave it out.
 	ignoreCtime bool
+}
+
+// defs returns the categories of the platform.
+func (s *Scanner) defs() []Def {
+	platform := s.Platform
+	if platform == "" {
+		platform = runtime.GOOS
+	}
+	if platform == "windows" {
+		env := s.Getenv
+		if env == nil {
+			env = os.Getenv
+		}
+		return WindowsDefs(s.Home, env)
+	}
+	return Defs(s.Home)
 }
 
 func (s *Scanner) now() time.Time {
@@ -56,6 +85,7 @@ type measured struct {
 	count     int
 	locations []string
 	downloads map[string]snapshot.Seen
+	bin       *BinSize
 }
 
 func lower(s string) string { return strings.ToLower(s) }
@@ -96,6 +126,7 @@ func (s *Scanner) measureCache(ctx context.Context, def Def, roots []Root, onTic
 		walk.Walk(ctx, root.Path, walk.Options{
 			MaxEntries: scanCap,
 			SameDevice: true,
+			Identity:   true, // the link counts
 			SkipDir: func(p, name string, depth int) bool {
 				return (depth == 1 && excluded[lower(name)]) || keptByRoot(root, p)
 			},
@@ -197,7 +228,7 @@ type assessed struct {
 // counts as in use.
 func (s *Scanner) assess(ctx context.Context, p string, cutoff int64) assessed {
 	a := assessed{path: p}
-	fi, err := os.Lstat(p)
+	fi, err := walk.Lstat(p)
 	if err != nil {
 		return a
 	}
@@ -225,6 +256,7 @@ func (s *Scanner) assess(ctx context.Context, p string, cutoff int64) assessed {
 		files := 0
 		st := walk.Walk(wctx, p, walk.Options{
 			MaxEntries: 200_000,
+			Identity:   true, // the status change times
 			OnDirInfo: func(dp string, _ int, di fs.FileInfo) {
 				if d := dirDev(dp, di); d != rootDev || d == 0 {
 					a.crossed = true
@@ -390,6 +422,13 @@ func (s *Scanner) recheckDownloads(ctx context.Context) oldDownloads {
 }
 
 func (s *Scanner) measure(ctx context.Context, def Def, onTick func(string)) measured {
+	if def.Kind == KindRecycleBin {
+		b, ok := s.binSize()
+		if !ok {
+			return measured{}
+		}
+		return measured{size: b.Size, count: int(b.Items), locations: []string{"All drives"}, bin: &b}
+	}
 	if def.Kind == KindDownloads {
 		r := s.findOldDownloads(ctx)
 		m := measured{size: r.size, count: len(r.paths), downloads: r.seen}
@@ -410,7 +449,7 @@ func (s *Scanner) Scan(ctx context.Context, rep progress.Reporter) ([]model.Junk
 // trashEntries lists the top-level entries of the Trash category's folders.
 func (s *Scanner) trashEntries() map[string][2]uint64 {
 	out := map[string][2]uint64{}
-	for _, def := range Defs(s.Home) {
+	for _, def := range s.defs() {
 		if def.ID != "trash" {
 			continue
 		}
@@ -420,7 +459,7 @@ func (s *Scanner) trashEntries() map[string][2]uint64 {
 				continue
 			}
 			for _, e := range list {
-				if fi, err := os.Lstat(filepath.Join(root.Path, e.Name())); err == nil {
+				if fi, err := walk.Lstat(filepath.Join(root.Path, e.Name())); err == nil {
 					out[e.Name()] = [2]uint64{walk.Dev(fi), walk.Ino(fi)}
 				}
 			}
@@ -441,12 +480,15 @@ func (s *Scanner) ScanState(ctx context.Context, rep progress.Reporter) ([]model
 type State struct {
 	TrashEntries map[string][2]uint64
 	Downloads    map[string]snapshot.Seen
+	// RecycleBin is the Recycle Bin as the scan measured it, nil when it
+	// was not measured; see Scanner.RecycleSeen.
+	RecycleBin *BinSize
 }
 
 // ScanWithState is Scan that also returns the State of the scan.
 func (s *Scanner) ScanWithState(ctx context.Context, rep progress.Reporter) ([]model.JunkCategory, State, error) {
 	st := State{TrashEntries: s.trashEntries(), Downloads: map[string]snapshot.Seen{}}
-	defs := Defs(s.Home)
+	defs := s.defs()
 	found := []model.JunkCategory{}
 	for i, def := range defs {
 		if ctx.Err() != nil {
@@ -463,11 +505,14 @@ func (s *Scanner) ScanWithState(ctx context.Context, rep progress.Reporter) ([]m
 		if def.Kind == KindDownloads {
 			st.Downloads = m.downloads
 		}
+		if def.Kind == KindRecycleBin {
+			st.RecycleBin = m.bin
+		}
 		found = append(found, model.JunkCategory{
 			ID: def.ID, Name: def.Name, Description: def.Description, Icon: def.Icon,
 			Size: m.size, Count: m.count, Locations: orEmpty(m.locations, 24), Safe: def.Safe,
-			// cache files are deleted for good; only old downloads go to the Trash
-			Irreversible: def.Kind == KindCache,
+			// cache files and the emptied Recycle Bin are gone for good; only old downloads go to the Trash
+			Irreversible: def.Kind != KindDownloads,
 		})
 	}
 	rep.Call("Done", len(defs), len(defs), "")
@@ -505,7 +550,12 @@ func (s *Scanner) cleanCache(ctx context.Context, def Def) tally {
 		}
 		list, err := os.ReadDir(root.Path)
 		if err != nil {
-			switch statusOf(err) {
+			st := statusOf(err)
+			// Windows reads a file where the folder should be as "path not found"
+			if st == descSkip && walk.Exists(root.Path) {
+				st = descFailed
+			}
+			switch st {
 			case descDenied:
 				t.denied++
 			case descFailed:
@@ -546,7 +596,7 @@ func (s *Scanner) sameAsScanned(root, name string) bool {
 	if !ok {
 		return false
 	}
-	fi, err := os.Lstat(filepath.Join(root, name))
+	fi, err := walk.Lstat(filepath.Join(root, name))
 	return err == nil && want == [2]uint64{walk.Dev(fi), walk.Ino(fi)}
 }
 
@@ -563,14 +613,20 @@ func files(n int, one, many string) string {
 // are always re-derived here.
 func (s *Scanner) Clean(ctx context.Context, ids []string, rep progress.Reporter) (model.CleanResult, error) {
 	var defs []Def
-	for _, d := range Defs(s.Home) {
+	for _, d := range s.defs() {
 		if slices.Contains(ids, d.ID) {
 			defs = append(defs, d)
 		}
 	}
-	// Old downloads go to the Trash, so they must run after the Trash is
-	// emptied or they would be erased for good.
-	slices.SortStableFunc(defs, func(a, b Def) int { return int(a.Kind) - int(b.Kind) })
+	// Old downloads go to the Trash, so they must run after the Trash (or
+	// the Recycle Bin) is emptied or they would be erased for good.
+	last := func(d Def) int {
+		if d.Kind == KindDownloads {
+			return 1
+		}
+		return 0
+	}
+	slices.SortStableFunc(defs, func(a, b Def) int { return last(a) - last(b) })
 
 	res := model.CleanResult{Skipped: []string{}, Notes: []string{}}
 	var locked, refused, failed int
@@ -579,6 +635,10 @@ func (s *Scanner) Clean(ctx context.Context, ids []string, rep progress.Reporter
 			break
 		}
 		rep.Call(def.Name, i, len(defs), "")
+		if def.Kind == KindRecycleBin {
+			s.emptyBin(&res)
+			continue
+		}
 		if def.Kind == KindDownloads {
 			var old oldDownloads
 			if s.Downloads != nil {
@@ -608,7 +668,7 @@ func (s *Scanner) Clean(ctx context.Context, ids []string, rep progress.Reporter
 				res.Notes = append(res.Notes, "Old downloads: "+n)
 			}
 			if r.Removed > 0 {
-				res.Notes = append(res.Notes, "Old downloads went to the Trash, so you can restore them")
+				res.Notes = append(res.Notes, "Old downloads went to the "+trash.BinName+", so you can restore them")
 			}
 			continue
 		}

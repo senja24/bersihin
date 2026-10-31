@@ -84,6 +84,9 @@ func (p *Provider) candidate(ctx context.Context, raw string, mounts *[]string) 
 // denied applies the name rules: network and automount folders, the Data
 // volume's view of /Volumes, and volumes that are not fixed local ones.
 func (p *Provider) denied(ctx context.Context, abs string, mounts *[]string) bool {
+	if filepath.Separator == '\\' {
+		return p.deniedDrive(ctx, abs, mounts)
+	}
 	for _, root := range autofsNames {
 		if folded.Same(abs, root) || folded.Inside(root, abs) {
 			return true
@@ -273,4 +276,27 @@ func (p *Provider) Icons(ctx context.Context, paths []string) (map[string]string
 		}
 	})
 	return out, nil
+}
+
+// deniedDrive is denied for Windows: only the drive of the home folder and
+// the fixed local drives are asked for icons (pathsafe.Clean has refused UNC
+// paths already), so a mapped network drive or a removable one is never
+// touched.
+func (p *Provider) deniedDrive(ctx context.Context, abs string, mounts *[]string) bool {
+	vol := filepath.VolumeName(abs)
+	if vol != "" && folded.Same(vol, filepath.VolumeName(p.Home)) {
+		return false
+	}
+	if *mounts == nil {
+		*mounts = []string{}
+		if p.LocalMounts != nil {
+			*mounts = append(*mounts, p.LocalMounts(ctx)...)
+		}
+	}
+	for _, m := range *mounts {
+		if folded.Same(abs, m) || folded.Inside(m, abs) {
+			return false
+		}
+	}
+	return true
 }

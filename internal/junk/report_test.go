@@ -7,10 +7,16 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"dev.agus.bersihin/internal/testenv"
+	"dev.agus.bersihin/internal/trash"
 )
 
+// skipIfRoot skips a test that denies access with chmod where that cannot
+// work: for root, and on Windows (see testenv.Permissions).
 func skipIfRoot(t *testing.T) {
 	t.Helper()
+	testenv.Permissions(t)
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores file permissions")
 	}
@@ -135,7 +141,7 @@ func TestOldDownloadsTrashLineIsANote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(res.Notes, "Old downloads went to the Trash, so you can restore them") {
+	if !slices.Contains(res.Notes, "Old downloads went to the "+trash.BinName+", so you can restore them") {
 		t.Fatalf("notes = %v", res.Notes)
 	}
 	if len(res.Skipped) != 0 || res.Failed != 0 || res.Denied != 0 {

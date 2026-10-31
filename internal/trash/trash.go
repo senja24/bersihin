@@ -1,12 +1,12 @@
-// Package trash moves the user's own files to the system Trash, behind the
-// path safety check. Nothing here deletes anything for good.
+// Package trash moves the user's own files to the system Trash (the Recycle
+// Bin on Windows), behind the path safety check. Nothing here deletes
+// anything for good.
 package trash
 
 import (
 	"context"
 	"fmt"
 	"io/fs"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -20,15 +20,18 @@ import (
 type Trasher struct {
 	// Guard returns the rules for this call (data volumes may change).
 	Guard func(ctx context.Context) pathsafe.Guard
-	// Move puts one canonical path in the Trash (Shell.TrashItem). It must
-	// fail, and leave the item alone, when the item cannot be trashed.
+	// Move puts one canonical path in the Trash (Shell.TrashItem; on Windows
+	// wrapped in RecycleOnly). It must fail, and leave the item alone, when
+	// the item cannot be trashed: MyGo's Windows TrashItem recycles through
+	// IFileOperation with FOF_ALLOWUNDO and refuses any delete that would
+	// not go to the Recycle Bin.
 	Move func(path string) error
 }
 
 // devOf is the device of the item at p, 0 when unknown. A variable so that
 // tests can stand in for a mount.
 var devOf = func(p string) uint64 {
-	if fi, err := os.Lstat(p); err == nil {
+	if fi, err := walk.Lstat(p); err == nil {
 		return walk.Dev(fi)
 	}
 	return 0
@@ -39,7 +42,7 @@ var devOf = func(p string) uint64 {
 // never enters such a folder, and the caller must not move p then: the
 // Trash move of a folder takes everything mounted in it along.
 func sizeOf(ctx context.Context, p string) (size int64, crossed bool) {
-	fi, err := os.Lstat(p)
+	fi, err := walk.Lstat(p)
 	if err != nil || !fi.IsDir() {
 		return walk.Size(ctx, p), false
 	}
@@ -53,11 +56,16 @@ func sizeOf(ctx context.Context, p string) (size int64, crossed bool) {
 			}
 			return false
 		},
+		// Windows: a junction or mount point inside may lead to another
+		// volume or anywhere on this one; the folder is left alone
+		OnReparse: func(string) { crossed = true },
 	})
 	return st.Bytes, crossed
 }
 
-var lockedRe = regexp.MustCompile(`(?i)in use|busy|being used|locked|sharing violation`)
+// lockedRe matches the errors of an item held open by another app; on
+// Windows the shell reports a sharing or lock violation as an HRESULT.
+var lockedRe = regexp.MustCompile(`(?i)in use|busy|being used|locked|sharing violation|HRESULT 0x8007002[01]\b`)
 
 func commas(n int) string {
 	s := strconv.Itoa(n)
@@ -84,7 +92,8 @@ type Identity struct {
 	Dir         bool
 }
 
-// IdentityOf reads the identity of fi.
+// IdentityOf reads the identity of fi, which must come from walk.Lstat for
+// Dev and Ino to be known on Windows.
 func IdentityOf(fi fs.FileInfo) Identity {
 	m, _, _ := walk.Times(fi)
 	return Identity{Dev: walk.Dev(fi), Ino: walk.Ino(fi), Size: fi.Size(), MTime: m}
@@ -184,7 +193,7 @@ func (t *Trasher) TrashChecked(ctx context.Context, paths []string, expect map[s
 		}
 		if expect != nil {
 			want, ok := expect[origin[p]]
-			fi, err := os.Lstat(p)
+			fi, err := walk.Lstat(p)
 			if !ok || err != nil || !want.matches(fi) {
 				changed++
 				continue
@@ -211,7 +220,7 @@ func (t *Trasher) TrashChecked(ctx context.Context, paths []string, expect map[s
 		res.Skipped = append(res.Skipped, fmt.Sprintf("%s blocked for safety", plural(blocked, "item", "items")))
 	}
 	if errs > 0 {
-		res.Skipped = append(res.Skipped, fmt.Sprintf("%s could not be moved to the Trash", plural(errs, "item", "items")))
+		res.Skipped = append(res.Skipped, fmt.Sprintf("%s could not be moved to the %s", plural(errs, "item", "items"), BinName))
 	}
 	if changed > 0 {
 		res.Skipped = append(res.Skipped, fmt.Sprintf("%s changed before %s moved", plural(changed, "file", "files"), map[bool]string{true: "it was", false: "they were"}[changed == 1]))

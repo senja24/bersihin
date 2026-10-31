@@ -9,6 +9,7 @@ import (
 
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/progress"
+	"dev.agus.bersihin/internal/testenv"
 	"dev.agus.bersihin/internal/walk"
 )
 
@@ -28,7 +29,7 @@ func put(t *testing.T, p string, size int, age time.Duration) int64 {
 		t.Fatal(err)
 	}
 	ts := time.Now().Add(-age)
-	os.Chtimes(p, ts, ts)
+	testenv.Chtimes(p, ts, ts)
 	fi, err := os.Stat(p)
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +62,7 @@ func TestScanHome(t *testing.T) {
 	zshrc := put(t, filepath.Join(home, ".zshrc"), 10, time.Hour)
 	outside := t.TempDir()
 	put(t, filepath.Join(outside, "huge"), 99999, time.Hour)
-	os.Symlink(outside, filepath.Join(home, "linked"))
+	testenv.Symlink(t, outside, filepath.Join(home, "linked"))
 	os.MkdirAll(filepath.Join(home, "Empty"), 0o755)
 
 	s := &Scanner{

@@ -11,6 +11,7 @@ import (
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/pathsafe"
 	"dev.agus.bersihin/internal/progress"
+	"dev.agus.bersihin/internal/testenv"
 	"dev.agus.bersihin/internal/trash"
 )
 
@@ -23,7 +24,7 @@ func put(t *testing.T, p string, size int, age time.Duration) string {
 		t.Fatal(err)
 	}
 	ts := time.Now().Add(-age)
-	if err := os.Chtimes(p, ts, ts); err != nil {
+	if err := testenv.Chtimes(p, ts, ts); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -44,7 +45,8 @@ func newFixture(t *testing.T) *fixture {
 	os.MkdirAll(f.home, 0o755)
 	os.MkdirAll(f.outside, 0o755)
 	f.sc = &Scanner{
-		Home: f.home,
+		Home:     f.home,
+		Platform: "darwin", // the Mac's categories, on any OS
 		Trasher: &trash.Trasher{
 			Guard: func(context.Context) pathsafe.Guard {
 				g := pathsafe.NewGuard(f.home, nil)
@@ -70,8 +72,8 @@ func TestDeleteEntryTree(t *testing.T) {
 	put(t, filepath.Join(root, "com.foo", "y.bin"), 50, old)
 	put(t, filepath.Join(f.outside, "precious"), 10, old)
 	// a link inside the tree to a folder outside, and one to a file outside
-	os.Symlink(f.outside, filepath.Join(root, "com.foo", "a", "linkdir"))
-	os.Symlink(filepath.Join(f.outside, "precious"), filepath.Join(root, "com.foo", "linkfile"))
+	testenv.Symlink(t, f.outside, filepath.Join(root, "com.foo", "a", "linkdir"))
+	testenv.Symlink(t, filepath.Join(f.outside, "precious"), filepath.Join(root, "com.foo", "linkfile"))
 
 	out := DeleteEntry(context.Background(), filepath.Join(root, "com.foo"), root, DeleteOptions{Home: f.home})
 	if out.Refused || out.Removed != 2 || out.Freed != 150 {
@@ -105,8 +107,8 @@ func TestDeleteEntryRefuses(t *testing.T) {
 	put(t, filepath.Join(root, "ok", "a"), 1, old)
 	put(t, filepath.Join(f.outside, "dir", "secret"), 5, old)
 	put(t, filepath.Join(f.home, "Documents", "doc.txt"), 5, old)
-	os.Symlink(filepath.Join(f.outside, "dir"), filepath.Join(root, "evil"))
-	os.Symlink(f.outside, filepath.Join(f.home, "Library", "rootlink"))
+	testenv.Symlink(t, filepath.Join(f.outside, "dir"), filepath.Join(root, "evil"))
+	testenv.Symlink(t, f.outside, filepath.Join(f.home, "Library", "rootlink"))
 
 	tests := []struct {
 		name, target, root string
@@ -179,8 +181,8 @@ func TestDefsIgnoreLinkedRoots(t *testing.T) {
 	f := newFixture(t)
 	put(t, filepath.Join(f.outside, "cache", "big"), 1000, old)
 	os.MkdirAll(f.p("Library"), 0o755)
-	os.Symlink(filepath.Join(f.outside, "cache"), f.p("Library", "Caches"))
-	os.Symlink(f.outside, f.p("Library", "Logs"))
+	testenv.Symlink(t, filepath.Join(f.outside, "cache"), f.p("Library", "Caches"))
+	testenv.Symlink(t, f.outside, f.p("Library", "Logs"))
 
 	for _, d := range Defs(f.home) {
 		if d.Roots == nil {
@@ -218,7 +220,7 @@ func populate(t *testing.T, f *fixture) {
 	put(t, f.p("Downloads", "mixed", "new.bin"), 100, time.Hour)
 	put(t, f.p("Downloads", "oldfolder", "a.bin"), 300, old)
 	put(t, f.p("Downloads", ".DS_Store"), 10, old)
-	if err := os.Chtimes(f.p("Downloads", "oldfolder"), time.Now().Add(-old), time.Now().Add(-old)); err != nil {
+	if err := testenv.Chtimes(f.p("Downloads", "oldfolder"), time.Now().Add(-old), time.Now().Add(-old)); err != nil {
 		t.Fatal(err)
 	}
 	// Cache folders were last changed long ago too (a folder changed within
@@ -239,7 +241,7 @@ func ageDirs(t *testing.T, root string) {
 		return nil
 	})
 	for i := len(dirs) - 1; i >= 0; i-- { // children first, so a parent keeps its time
-		os.Chtimes(dirs[i], ts, ts)
+		testenv.Chtimes(dirs[i], ts, ts)
 	}
 }
 
@@ -286,7 +288,7 @@ func TestScan(t *testing.T) {
 		if c.Size != w.size || c.Count != w.count || c.Safe != w.safe {
 			t.Errorf("%s = size %d count %d safe %v, want %+v", id, c.Size, c.Count, c.Safe, w)
 		}
-		if w.loc != "" && !slices.Contains(c.Locations, w.loc) {
+		if w.loc != "" && !slices.Contains(c.Locations, filepath.FromSlash(w.loc)) {
 			t.Errorf("%s locations = %v, want %s", id, c.Locations, w.loc)
 		}
 	}
@@ -350,7 +352,7 @@ func TestClean(t *testing.T) {
 	if res.Freed != 4000+500+2000+1200+300 || res.Failed != 0 {
 		t.Errorf("res = %+v", res)
 	}
-	if !slices.Contains(res.Notes, "Old downloads went to the Trash, so you can restore them") {
+	if !slices.Contains(res.Notes, "Old downloads went to the "+trash.BinName+", so you can restore them") {
 		t.Errorf("notes = %v", res.Notes)
 	}
 	if len(res.Skipped) != 0 {

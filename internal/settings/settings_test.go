@@ -11,6 +11,7 @@ import (
 	"dev.agus.bersihin/internal/config"
 	"dev.agus.bersihin/internal/endpoint"
 	"dev.agus.bersihin/internal/model"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 type memSecrets struct {
@@ -114,7 +115,8 @@ func TestPatchPersistsAtomically(t *testing.T) {
 		t.Fatalf("folder holds %v (a temp file was left behind?)", entries)
 	}
 	fi, _ := os.Stat(filepath.Join(dir, "settings.json"))
-	if fi.Mode().Perm() != 0o600 {
+	// Windows keeps no Unix permission bits; the file is in the user's own AppData there
+	if !testenv.Windows && fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v", fi.Mode().Perm())
 	}
 	// a new store reads it back

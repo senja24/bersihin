@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater"
@@ -55,25 +56,8 @@ func main() {
 	}
 	// Sparkle-style update window: checks 10 s after launch, then daily.
 	mygo.Use(updater.Plugin)
-	// MyGo's default menu bar plus "Check for Updates..." after About.
-	mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-		{Label: "Bersihin", Submenu: []*mygo.MenuItem{
-			{Role: mygo.RoleAbout},
-			updater.MenuItem(),
-			mygo.Separator(),
-			{Role: mygo.RoleServices},
-			mygo.Separator(),
-			{Role: mygo.RoleHide},
-			{Role: mygo.RoleHideOthers},
-			{Role: mygo.RoleUnhide},
-			mygo.Separator(),
-			{Role: mygo.RoleQuit},
-		}},
-		{Role: mygo.RoleFileMenu},
-		{Role: mygo.RoleEditMenu},
-		{Role: mygo.RoleViewMenu},
-		{Role: mygo.RoleWindowMenu},
-	}))
+	// The Mac's menu bar, or a Windows one with File, Edit, View and Help (see menuTemplate).
+	mygo.App.SetMenu(mygo.NewMenu(menuTemplate(runtime.GOOS == "windows", updater.MenuItem(), showAbout)))
 	// Light appearance only, whatever the system uses.
 	mygo.Theme.SetSource(mygo.ThemeLight)
 
@@ -90,6 +74,8 @@ func main() {
 			BackgroundColor:      "#f2f3f6", // --color-paper in src/styles/tokens.css
 			TitleBarStyle:        mygo.TitleBarHidden,
 			TrafficLightPosition: &mygo.Point{X: 20, Y: 16},
+			// Windows: the window buttons fill the page's title bar, --titlebar-height
+			TitleBarHeight: 44,
 			// The frontend: devUrl during `mygo dev`, frontendDist
 			// embedded by `mygo build` otherwise (see mygo.config.ts).
 			URL: "/",

@@ -130,10 +130,11 @@ func (s *Scanner) ScanCounted(ctx context.Context, minBytes int64, rep progress.
 	if tmp == "" {
 		tmp = os.TempDir()
 	}
-	library := filepath.Join(s.Home, "Library")
+	library := filepath.Join(s.Home, appData)
 	skip := map[string]bool{}
-	// ~/Library is left out whole: containers, VM images, app databases and
-	// browser profiles live there, and the Trash guard refuses it anyway.
+	// ~/Library (AppData on Windows) is left out whole: containers, VM
+	// images, app databases and browser profiles live there, and the Trash
+	// guard refuses it anyway.
 	// Container and VM stores hold disks that break when one file goes.
 	skipped := []string{tmp, library, filepath.Join(s.Home, ".Trash"), filepath.Join(s.Home, ".cache")}
 	for _, n := range []string{
@@ -235,7 +236,7 @@ func (s *Scanner) ScanCounted(ctx context.Context, minBytes int64, rep progress.
 			SkipDirConcurrent: func(p, name string, depth int) bool {
 				return opaqueAt(p, name) || g.Inside(s.Home, p) || g.Same(s.Home, p) ||
 					g.Inside(realHome, p) || g.Same(realHome, p) || g.Inside(realLib, p) || g.Same(realLib, p) ||
-					(depth == 1 && (driveSkipTop[strings.ToLower(name)] || strings.HasPrefix(name, ".")))
+					(depth == 1 && (driveSkipTop[strings.ToLower(name)] || strings.HasPrefix(name, ".") || strings.HasPrefix(name, driveSkipPrefix)))
 			},
 			OnFile: collect,
 			OnTick: ticker(phase),

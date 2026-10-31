@@ -175,9 +175,9 @@ func newCore(d Deps) *core {
 	}
 	c.trasher = &trash.Trasher{
 		Guard: func(ctx context.Context) pathsafe.Guard {
-			return pathsafe.NewGuard(d.Home, c.disks.DataMounts(ctx))
+			return pathsafe.ForPlatform(d.Home, c.disks.DataMounts(ctx))
 		},
-		Move: d.Shell.TrashItem,
+		Move: trash.RecycleOnly(d.Shell.TrashItem),
 	}
 	c.icons = &icons.Provider{
 		Home:        d.Home,
@@ -230,6 +230,8 @@ var errBadRequest = errors.New("Invalid request")
 func (c *core) systemInfo(ctx context.Context) model.SystemInfo {
 	info := model.SystemInfo{
 		Platform: runtime.GOOS, Arch: runtime.GOARCH, AppVersion: c.deps.AppVersion(), HomeDir: c.deps.Home,
+		TrashName: trash.BinName, FileManager: fileManager, Unsupported: unsupportedScreens(),
+		OSVersion: osVersion(),
 	}
 	if runtime.GOOS == "darwin" {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

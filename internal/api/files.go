@@ -30,8 +30,9 @@ type Junk struct{ c *core }
 func (j *Junk) scanner(at time.Time) *junk.Scanner {
 	return &junk.Scanner{
 		Home: j.c.deps.Home, Trasher: j.c.trasher, Now: func() time.Time { return at },
-		// a file opened in Preview or Finder counts as used, whatever its atime says
-		LastUsed: junk.MdlsLastUsed(j.c.deps.Run),
+		// a file opened in Preview or Finder (on Windows: through the shell,
+		// as Recent Items show) counts as used, whatever its atime says
+		LastUsed: lastUsed(j.c.deps.Run),
 	}
 }
 
@@ -53,6 +54,9 @@ func (j *Junk) Scan(ctx context.Context, runID string) ([]model.JunkCategory, er
 	snap := snapshot.Junk(runID, at, cats)
 	snap.TrashEntries = state.TrashEntries
 	snap.Downloads = state.Downloads
+	if state.RecycleBin != nil {
+		snap.RecycleBin = &[2]int64{state.RecycleBin.Size, state.RecycleBin.Items}
+	}
 	if err := j.c.snaps.Put(snap); err != nil {
 		return nil, err
 	}
@@ -92,7 +96,14 @@ func (j *Junk) Clean(ctx context.Context, runID, scanID string, ids []string, to
 	if sc.Downloads == nil {
 		sc.Downloads = map[string]snapshot.Seen{}
 	}
-	if slices.Contains(ids, "old-downloads") { // moves files to the Trash like TrashPaths
+	// the Recycle Bin is emptied only if it holds no more than the scan saw
+	sc.RecycleSeen = &junk.BinSize{}
+	if b := snap.RecycleBin; b != nil {
+		sc.RecycleSeen = &junk.BinSize{Size: b[0], Items: b[1]}
+	}
+	// old downloads move files to the Trash like TrashPaths; emptying the
+	// Recycle Bin must not run while a move puts something new in it
+	if slices.Contains(ids, "old-downloads") || slices.Contains(ids, "recycle-bin") {
 		unlock, err := j.c.lockMoves(ctx)
 		if err != nil {
 			return noResult(), err

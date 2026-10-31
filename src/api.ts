@@ -17,7 +17,7 @@ export const isDemo = !isMyGo();
 // stops being `true` and tsc fails, so the page can never quietly disagree with Go about a result.
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type MustBeTrue<T extends true> = T;
-// SystemInfo.platform is "darwin" here but a plain string in Go (it always says darwin in a real build)
+// SystemInfo.platform is "darwin" or "windows" here but a plain string in Go (runtime.GOOS)
 type NoPlatform<T> = Omit<T, "platform">;
 export type ContractChecks = [
   MustBeTrue<Same<Page.CleanResult, Go.CleanResult>>,
@@ -48,7 +48,7 @@ export type ContractChecks = [
 
 function createBackendApi(): BersihinApi {
   return {
-    // the Go side always reports "darwin" in a real build
+    // the Go side reports "darwin" or "windows" in a real build
     system: () => rejectAsError(System.info() as Promise<Page.SystemInfo>),
     disk: () => rejectAsError(System.disk()),
     disks: () => rejectAsError(System.disks()),

@@ -30,7 +30,8 @@ const (
 // iCloud placeholders count nothing. Tests swap it.
 var allocatedOf = func(f walk.File) int64 { return f.Allocated() }
 
-// Path segments that mark regenerable data inside ~/Library (approximate on purpose).
+// Path segments that mark regenerable data inside ~/Library (or AppData on
+// Windows; approximate on purpose).
 var cacheSegment = regexp.MustCompile(`(?i)(^|/)(cache|caches|code cache|gpucache|cache_data|cache2|cachestorage|scriptcache|shadercache|grshadercache|temp|tmp|crashdumps|logs|npm-cache|deriveddata)(/|$)`)
 
 var (
@@ -205,7 +206,7 @@ func (r *run) measure(ctx context.Context, dir string, o measureOpts) *model.Spa
 	r.step(phase, "")
 	s := r.s
 	isDownloads := folded.Same(dir, filepath.Join(s.Home, "Downloads"))
-	isLibrary := folded.Same(dir, filepath.Join(s.Home, "Library"))
+	isLibrary := folded.Same(dir, filepath.Join(s.Home, appData))
 	buckets := map[string]*bucket{}
 	var total int64
 	prefix := strings.TrimSuffix(dir, string(filepath.Separator)) + string(filepath.Separator)

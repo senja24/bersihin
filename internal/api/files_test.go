@@ -18,6 +18,7 @@ import (
 	"dev.agus.bersihin/internal/model"
 	"dev.agus.bersihin/internal/progress"
 	"dev.agus.bersihin/internal/snapshot"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 const (
@@ -55,6 +56,7 @@ func (e *env) largeScan(t *testing.T, names ...string) (string, []string) {
 
 // S2: Junk.Clean needs a token that matches exactly.
 func TestJunkCleanRefusesWithoutAMatchingToken(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	log := filepath.Join(e.home, "Library", "Logs", "app", "x.log")
 	cache := filepath.Join(e.home, "Library", "Caches", "com.foo", "c")
@@ -104,6 +106,7 @@ func TestJunkCleanRefusesWithoutAMatchingToken(t *testing.T) {
 func fileExists(p string) bool { _, err := os.Lstat(p); return err == nil }
 
 func TestJunkCleanTokenIsBoundToTheScan(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	log := filepath.Join(e.home, "Library", "Logs", "app", "x.log")
 	put(t, log, 100, 48*time.Hour)
@@ -121,6 +124,7 @@ func TestJunkCleanTokenIsBoundToTheScan(t *testing.T) {
 }
 
 func TestJunkCleanRefusesUnknownScan(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	put(t, filepath.Join(e.home, "Library", "Logs", "app", "x.log"), 100, 48*time.Hour)
 	_, err := e.svc.Confirm.Clean(rid(), []string{"mac-logs"})
@@ -306,6 +310,7 @@ func TestTrashSkipsFilesGrownSinceTheScan(t *testing.T) {
 // H1: a duplicate is moved only while a copy that stays still exists and still
 // holds the same content.
 func TestTrashDuplicateNeedsTheKeptCopyIntact(t *testing.T) {
+	testenv.MacLayout(t)
 	setup := func(t *testing.T) (*env, string, string, string, string) {
 		e := newEnv(t)
 		keep := filepath.Join(e.home, "Movies", "keep.bin")
@@ -473,6 +478,7 @@ func TestRunIDsAreValidated(t *testing.T) {
 // The 24 hour cutoff a clean applies is the one the scan showed: a file that
 // was 23h59m old at scan time stays even if the clean runs minutes later.
 func TestCleanUsesTheScanTimeCutoff(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	young := filepath.Join(e.home, "Library", "Logs", "young", "y.log")
 	old := filepath.Join(e.home, "Library", "Logs", "old", "o.log")
@@ -497,6 +503,7 @@ func TestCleanUsesTheScanTimeCutoff(t *testing.T) {
 
 // Every CleanResult the page can receive has arrays, never null.
 func TestCleanResultJSONHasNoNullSlices(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	put(t, filepath.Join(e.home, "Library", "Logs", "a", "x.log"), 10, 48*time.Hour)
 	scanID, _ := e.scanJunk(t)
@@ -530,6 +537,7 @@ func TestCleanResultJSONHasNoNullSlices(t *testing.T) {
 // S2: a file trashed after the junk scan is not erased by a clean confirmed
 // against that scan.
 func TestTrashAfterJunkScanSurvivesTheClean(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	trashDir := filepath.Join(e.home, ".Trash")
 	scannedFile := filepath.Join(trashDir, "old.bin")
@@ -613,6 +621,7 @@ func TestConcurrentTrashCannotRemoveEveryCopy(t *testing.T) {
 }
 
 func TestWaitingForTheMoveLockCanBeCancelled(t *testing.T) {
+	testenv.MacLayout(t)
 	e, id, keep, dup := dupSetup(t)
 	_ = keep
 	tok, _ := e.svc.Confirm.Trash(id, []string{dup})
@@ -635,6 +644,7 @@ func TestWaitingForTheMoveLockCanBeCancelled(t *testing.T) {
 // H1: the file is swapped for another one (same size and mtime) after the
 // recheck and before the move: it must not be moved.
 func TestTrashRefusesAFileSwappedAfterTheRecheck(t *testing.T) {
+	testenv.MacLayout(t)
 	e, id, keep, dup := dupSetup(t)
 	_ = keep
 	real := e.svc.Files.c.hash
@@ -666,7 +676,7 @@ func TestKeptCopyReplacedByALinkIsNotAcceptedByTheHash(t *testing.T) {
 	// the real hash function of the service refuses links outright
 	h := e.svc.Files.c.hash
 	link := keep + ".lnk"
-	os.Symlink(dup, link)
+	testenv.Symlink(t, dup, link)
 	if _, err := h(context.Background(), link); err == nil {
 		t.Fatal("a link was hashed")
 	}
@@ -676,6 +686,7 @@ func TestKeptCopyReplacedByALinkIsNotAcceptedByTheHash(t *testing.T) {
 // M6: an id is not reusable while a token for it may still be valid, even
 // when the snapshot behind it was evicted.
 func TestRunIDStaysTakenWhileATokenIsLive(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	put(t, filepath.Join(e.home, "Library", "Logs", "a", "x.log"), 10, 48*time.Hour)
 	scanID, _ := e.scanJunk(t)
@@ -730,6 +741,7 @@ func TestScanDoesNotReplaceAStoredSnapshot(t *testing.T) {
 // Files the Trash guard would refuse (a credentials or model store, a folder
 // shared by Syncthing) are not offered in the first place.
 func TestLargeFilesListsOnlyTrashableFiles(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	ok := filepath.Join(e.home, "Downloads", "ok.bin")
 	put(t, ok, 1<<20+1, 48*time.Hour)
@@ -752,6 +764,7 @@ func TestLargeFilesListsOnlyTrashableFiles(t *testing.T) {
 }
 
 func TestDuplicatesListOnlyTrashableCopies(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	a := filepath.Join(e.home, "Movies", "a.bin")
 	b := filepath.Join(e.home, "Movies", "b.bin")

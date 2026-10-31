@@ -8,15 +8,21 @@ export type IconName =
   | "layers" | "lock" | "power" | "search" | "close" | "plus" | "reveal" | "spark" | "warning" | "clock";
 
 export type SystemInfo = {
-  platform: "darwin";
+  platform: "darwin" | "windows";
   arch: string;
   osVersion: string;
   appVersion: string;
   homeDir: string;
+  /** "Trash", or "Recycle Bin" on Windows */
+  trashName: string;
+  /** "Finder", or "File Explorer" on Windows */
+  fileManager: string;
+  /** screens the platform does not have yet ("applications", "startup", "protection" on Windows) */
+  unsupported: string[];
 };
 
 export type DiskInfo = {
-  mount: string; // "/" or "/Volumes/Backup"
+  mount: string; // "/" or "/Volumes/Backup"; "C:\\" or "D:\\" on Windows
   label: string; // "Macintosh HD"
   total: number;
   free: number;
@@ -67,7 +73,8 @@ export type CleanResult = {
   cancelled: boolean;
 };
 
-export type UninstallResult = { ok: boolean; message: string };
+/** pending: an uninstaller was started (Windows), the app is not gone yet and stays listed */
+export type UninstallResult = { ok: boolean; message: string; pending?: boolean };
 
 export type SpaceNode = {
   name: string;
@@ -145,7 +152,11 @@ export type ProtectionStatus = {
   lastScan: number | null;
   score: number; // 0..100
   notes: string[];
+  /** further read-only checks of the platform (SmartScreen, BitLocker on Windows); on null = not read */
+  checks?: ProtectionCheck[];
 };
+
+export type ProtectionCheck = { label: string; detail: string; on: boolean | null };
 
 export type AiProvider = "claude" | "chatgpt" | "claude-compatible" | "openai-compatible";
 export type Background = "mist" | "grid" | "dots" | "grain";

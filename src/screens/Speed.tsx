@@ -4,7 +4,8 @@ import { Empty, PageHead, Spinner, Switch } from "../components/ui";
 import { messageOf } from "../lib/format";
 import { useCachedScan, useIcons, usePatch } from "../lib/hooks";
 import { changeStartup } from "../lib/startupChange";
-import { useApp } from "../store";
+import { iconSourceOf, startupWords, type StartupWords } from "../lib/systemWords";
+import { useApp, usePlatform } from "../store";
 import type { StartupItem } from "../types";
 import "../styles/tiles.css";
 import "./system.css";
@@ -16,13 +17,11 @@ const TIERS: { tier: Impact; heading: string; blurb: string }[] = [
   { tier: "medium", heading: "Medium impact", blurb: "Noticeable, but lighter" },
   { tier: "low", heading: "Low impact", blurb: "Barely felt at login" },
 ];
-const PASSWORD_NOTE = "macOS will ask for your password";
-
-/** The .app bundle that a login item's command runs from, when there is one. */
-const bundleOf = (command: string) => /^(\/.+?\.app)(?=\/|\s|$)/.exec(command.trim())?.[1];
-
-function LoginRow({ item, pending, icon, onSet }: { item: StartupItem; pending: boolean; icon: string | undefined; onSet: (on: boolean) => void }) {
-  const needsPassword = item.canToggle && item.needsAdmin;
+function LoginRow({ item, pending, icon, words, onSet }: { item: StartupItem; pending: boolean; icon: string | undefined; words: StartupWords; onSet: (on: boolean) => void }) {
+  const passwordNote = words.password;
+  // an admin change asks for the password on a Mac; Windows items of every user are read-only instead
+  const needsPassword = item.canToggle && item.needsAdmin && passwordNote !== "";
+  const locked = words.locked(item);
   const cls = ["row", !item.enabled && "is-off", pending && "is-busy"].filter(Boolean).join(" ");
   return (
     <div className={cls}>
@@ -39,7 +38,7 @@ function LoginRow({ item, pending, icon, onSet }: { item: StartupItem; pending: 
         <div className="title-line">
           <span className="row-title">{item.name}</span>
           {needsPassword && (
-            <span className="admin-tag" title={PASSWORD_NOTE}>
+            <span className="admin-tag" title={passwordNote}>
               <Icon name="shield" size={11} />
               Admin
             </span>
@@ -48,20 +47,20 @@ function LoginRow({ item, pending, icon, onSet }: { item: StartupItem; pending: 
         <div className="row-sub mono" title={item.command}>
           {item.command || "No command recorded"}
         </div>
-        {needsPassword && <div className={pending ? "row-sub ask is-on" : "row-sub ask"}>{pending ? "Waiting for your permission..." : PASSWORD_NOTE}</div>}
+        {needsPassword && <div className={pending ? "row-sub ask is-on" : "row-sub ask"}>{pending ? "Waiting for your permission..." : passwordNote}</div>}
       </div>
       <span className="where">{item.location}</span>
       {!item.canToggle ? (
-        <span className="locked" title="Controlled by your system or an administrator policy">
+        <span className="locked" title={locked.title}>
           <Icon name="lock" size={14} />
-          Managed by the system
+          {locked.label}
         </span>
       ) : pending ? (
         <span className="pending" role="status" aria-label={`Changing ${item.name}`}>
           <Spinner />
         </span>
       ) : (
-        <Switch checked={item.enabled} label={`Start ${item.name} at login${needsPassword ? ` (${PASSWORD_NOTE})` : ""}`} onChange={onSet} />
+        <Switch checked={item.enabled} label={`Start ${item.name} at login${needsPassword ? ` (${passwordNote})` : ""}`} onChange={onSet} />
       )}
     </div>
   );
@@ -69,10 +68,11 @@ function LoginRow({ item, pending, icon, onSet }: { item: StartupItem; pending: 
 
 function Speed() {
   const { notify } = useApp();
+  const words = startupWords(usePlatform());
   const scan = useCachedScan("startup", () => api.startupItems(), (e) => notify(messageOf(e, "Could not read login items"), "err"));
   const [work, set] = usePatch<{ busyId: string | null }>({ busyId: null });
   const all = scan.data ?? [];
-  const icons = useIcons(all.map((i) => bundleOf(i.command)));
+  const icons = useIcons(all.map((i) => iconSourceOf(i.command)));
 
   const change = async (item: StartupItem, on: boolean) => {
     if (work.busyId) return;
@@ -88,7 +88,7 @@ function Speed() {
   const fraction = all.length ? running.length / all.length : 0;
   const heavyRunning = running.filter((i) => i.impact === "high").length;
   const managed = all.filter((i) => !i.canToggle).length;
-  const passwordGated = all.filter((i) => i.canToggle && i.needsAdmin).length;
+  const passwordGated = words.password ? all.filter((i) => i.canToggle && i.needsAdmin).length : 0;
 
   return (
     <div className="screen">
@@ -110,7 +110,7 @@ function Speed() {
           ) : (
             <>
               <Spinner />
-              Looking at what starts with your Mac
+              {words.looking}
             </>
           )}
         </div>
@@ -144,7 +144,7 @@ function Speed() {
               </div>
               <p className="note">
                 Switching an app off only keeps it from opening at login. It stays installed, and you can turn it back on whenever you like.
-                {passwordGated > 0 && " Entries tagged Admin apply to every user, so macOS asks for permission first."}
+                {passwordGated > 0 && words.passwordNote}
               </p>
               <div className="stats">
                 <div className={heavyRunning ? "stat is-hot" : "stat"}>
@@ -157,7 +157,7 @@ function Speed() {
                 </div>
                 <div className="stat">
                   <strong>{managed > 0 || passwordGated === 0 ? managed : passwordGated}</strong>
-                  <span>{managed > 0 || passwordGated === 0 ? "locked by the system" : "need admin rights"}</span>
+                  <span>{managed > 0 || passwordGated === 0 ? (words.password ? "locked by the system" : "read-only here") : "need admin rights"}</span>
                 </div>
               </div>
             </section>
@@ -165,7 +165,7 @@ function Speed() {
 
           {all.length === 0 ? (
             <div className="glass">
-              <Empty icon="power" title="Nothing opens at login" text="Your Mac already starts as light as it can." />
+              <Empty icon="power" title="Nothing opens at login" text={words.empty} />
             </div>
           ) : (
             <div className="stagger group-stack">
@@ -184,8 +184,8 @@ function Speed() {
                     </div>
                     <div className="rows">
                       {members.map((item) => {
-                        const bundle = bundleOf(item.command);
-                        return <LoginRow key={item.id} item={item} pending={work.busyId === item.id} icon={bundle ? icons[bundle] : undefined} onSet={(on) => void change(item, on)} />;
+                        const source = iconSourceOf(item.command);
+                        return <LoginRow key={item.id} item={item} pending={work.busyId === item.id} icon={source ? icons[source] : undefined} words={words} onSet={(on) => void change(item, on)} />;
                       })}
                     </div>
                   </section>

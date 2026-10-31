@@ -7,6 +7,7 @@ import { createAiGate, type Pending } from "../lib/aiGate";
 import { mergeOriginals, shortenContext } from "../lib/aiPreview";
 import { formatBytes, formatDate, leafName, messageOf, tildePath } from "../lib/format";
 import { usePatch } from "../lib/hooks";
+import { within } from "../lib/platform";
 import { newRunId } from "../lib/runId";
 import { useApp } from "../store";
 import type { AiAdvice, AiContext, AiProvider } from "../types";
@@ -348,9 +349,9 @@ function Assistant() {
     }
   };
 
-  const expand = (p: string) => (/^~(\/|$)/.test(p) && home ? home + p.slice(1) : p);
+  const expand = (p: string) => (/^~([\\/]|$)/.test(p) && home ? home + p.slice(1) : p);
   const junkRoots = (junk ?? []).flatMap((j) => j.locations.map((l) => bare(expand(l))));
-  const insideJunk = (p: string) => junkRoots.some((r) => r && (bare(p) === r || bare(p).startsWith(r + "/")));
+  const insideJunk = (p: string) => junkRoots.some((r) => r && within(r, bare(p)));
   // The assistant only ever saw shortened paths; map them back to the real ones before touching the disk.
   const realPath = (p: string) => originals.current.get(p) ?? expand(p);
   const isAmbiguous = (p: string) => originals.current.get(p) === null;

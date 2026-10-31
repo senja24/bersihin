@@ -1,6 +1,7 @@
 // Package pathsafe decides which paths the app may move to the Trash or
-// delete. It is platform neutral: the macOS rules are data (see NewGuard), so
-// the table tests run on any OS.
+// delete. It is platform neutral: the macOS and Windows rules are data (see
+// NewGuard and NewWindowsGuard), so the table tests run on any OS; only the
+// path syntax (separator, drive letters) is the running OS's.
 //
 // The check is two-staged, like the reference app's: a lexical guard on the
 // path as given, then the same guard again on the canonical path (realpath),
@@ -39,8 +40,15 @@ type Guard struct {
 	// SystemRoots are folders nothing below Home may live in (/System, /usr…).
 	SystemRoots []string
 	// FoldCase compares paths case-insensitively, as the default macOS
-	// file systems do.
+	// file systems and NTFS do.
 	FoldCase bool
+	// Windows applies the rules of a Windows profile (see winRules) instead
+	// of a Mac home folder's.
+	Windows bool
+	// Protected are folders that are never removed, nor anything in them,
+	// nor a folder holding one, wherever they are (on Windows: the system
+	// folders, AppData\...\Microsoft and the OneDrive folders).
+	Protected []string
 }
 
 // macSystemRoots are the OS folders of a Mac.
@@ -90,6 +98,41 @@ var driveProtectedTop = []string{
 	"System", "Library", "Applications", "Users", "private", "Backups.backupdb", "cores", "usr", "bin", "sbin", "etc", "var", "opt",
 }
 
+// rules are the names a guard protects below the home folder and on a data
+// volume.
+type rules struct {
+	// protectedTop: entries directly in home never removed as a whole.
+	protectedTop []string
+	// denyTop: entries directly in home nothing in or under is removed.
+	denyTop []string
+	// topPrefixes: names directly in home starting with these are kept.
+	topPrefixes []string
+	secretDirs  [][]string
+	secretGlobs [][2]string
+	cloudDirs   [][]string
+	// driveProtectedTop: top-level entries of a data volume that belong to the OS.
+	driveProtectedTop []string
+	// drivePrefixes: top-level names of a data volume starting with these
+	// belong to the OS ("." always does).
+	drivePrefixes []string
+}
+
+var macRules = rules{
+	protectedTop:      protectedTop,
+	denyTop:           []string{"Library"},
+	secretDirs:        secretDirs,
+	secretGlobs:       secretGlobs,
+	cloudDirs:         cloudDirs,
+	driveProtectedTop: driveProtectedTop,
+}
+
+func (g Guard) rules() *rules {
+	if g.Windows {
+		return &winRules
+	}
+	return &macRules
+}
+
 var cloudTop = regexp.MustCompile(`(?i)^(OneDrive( - .+)?|(Dropbox|Nextcloud|ownCloud|MEGA)( \(.+\))?|Google Drive|My Drive|iCloud ?Drive|Yandex\.?Disk|Box|Box Sync|pCloud ?Drive|Synology ?Drive|(Creative Cloud Files|Resilio Sync|Seafile|Tresorit|Sync\.com|SugarSync|Egnyte|ShareFile).*)$`)
 
 // packageExt matches the names of macOS packages and bundles: folders that
@@ -126,6 +169,8 @@ func IsPackageDir(p string) bool {
 
 // inPackage reports whether a folder above abs is a package or a git store.
 // abs itself may be one: a package is removed as a whole, never from inside.
+// The macOS package names are refused on Windows too: a folder called
+// "x.app" there is rare, and leaving it alone costs nothing.
 func (g Guard) inPackage(abs string) bool {
 	for a := filepath.Dir(abs); ; a = filepath.Dir(a) {
 		if IsPackageName(g.fold(filepath.Base(a))) || IsPackageDir(a) {
@@ -256,13 +301,17 @@ func clean(p string) (string, bool) {
 	if p == "" || len(p) > maxPathLen || strings.ContainsRune(p, 0) || !filepath.IsAbs(p) {
 		return "", false
 	}
+	if filepath.Separator == '\\' && !WindowsShapeOK(p) {
+		return "", false
+	}
 	for seg := range strings.SplitSeq(p, string(filepath.Separator)) {
 		if seg == ".." || foldsAway(seg) {
 			return "", false
 		}
 	}
 	abs := filepath.Clean(p)
-	if abs == string(filepath.Separator) {
+	// "/" or a bare drive (C:\)
+	if abs == filepath.VolumeName(abs)+string(filepath.Separator) {
 		return "", false
 	}
 	return abs, true
@@ -299,6 +348,11 @@ func (g Guard) Safe(p string) bool {
 	if !ok {
 		return false
 	}
+	for _, prot := range g.Protected {
+		if g.Same(abs, prot) || g.Inside(prot, abs) || g.Inside(abs, prot) {
+			return false
+		}
+	}
 	if g.safeHome(abs) {
 		return true
 	}
@@ -321,29 +375,37 @@ func (g Guard) safeHome(abs string) bool {
 		}
 	}
 	parts := g.segments(home, abs)
-	if len(parts) == 1 && g.inList(protectedTop, parts[0]) {
+	rl := g.rules()
+	if len(parts) == 1 && g.inList(rl.protectedTop, parts[0]) {
 		return false
+	}
+	if len(parts) == 1 {
+		for _, pre := range rl.topPrefixes {
+			if strings.HasPrefix(g.fold(parts[0]), g.fold(pre)) {
+				return false
+			}
+		}
 	}
 	// A sync folder is protected with everything below it, at any depth.
 	if g.cloudAnywhere(parts, abs) || g.eq(parts[0], "Sync") {
 		return false
 	}
-	// ~/Library is deny by default: app data, containers, VM images and
-	// browser profiles live there. Junk cleaning does not go through this
-	// guard (it deletes inside its own roots), and apps are removed through
-	// AppBundle.
-	if g.eq(parts[0], "Library") {
+	// ~/Library (on Windows AppData and the legacy profile links) is deny
+	// by default: app data, containers, VM images and browser profiles live
+	// there. Junk cleaning does not go through this guard (it deletes inside
+	// its own roots), and apps are removed through AppBundle.
+	if g.inList(rl.denyTop, parts[0]) {
 		return false
 	}
 	if g.secretGlob(parts) {
 		return false
 	}
-	for _, s := range secretDirs {
+	for _, s := range rl.secretDirs {
 		if g.hasPrefixSegs(parts, s) {
 			return false
 		}
 	}
-	for _, c := range cloudDirs {
+	for _, c := range rl.cloudDirs {
 		if g.hasPrefixSegs(parts, c) {
 			return false
 		}
@@ -365,7 +427,7 @@ func (g Guard) secretGlob(parts []string) bool {
 	if len(parts) < 2 {
 		return false
 	}
-	for _, sg := range secretGlobs {
+	for _, sg := range g.rules().secretGlobs {
 		if g.eq(parts[0], sg[0]) && strings.HasPrefix(g.fold(parts[1]), g.fold(sg[1])) {
 			return true
 		}
@@ -383,13 +445,27 @@ func (g Guard) secretAnywhere(parts []string) bool {
 		if i > 0 && g.eq(s, "Keychains") && g.eq(parts[i-1], "Library") {
 			return true
 		}
+		// the AppData of a profile anywhere (an old Windows copied to a data
+		// drive): its Microsoft folders hold credentials and keys
+		if g.Windows && g.eq(s, "AppData") {
+			return true
+		}
 	}
 	return false
 }
 
+// cleanMount is clean for the mount of a data volume, which on Windows is
+// a bare drive root (D:\) that clean refuses as a path to remove.
+func cleanMount(m string) (string, bool) {
+	if filepath.Separator == '\\' && len(m) == 3 && WindowsShapeOK(m) {
+		return strings.ToUpper(m[:1]) + `:\`, true
+	}
+	return clean(m)
+}
+
 func (g Guard) safeDrive(abs, mount string) bool {
 	home, homeOK := clean(g.Home)
-	mount, ok := clean(mount)
+	mount, ok := cleanMount(mount)
 	if !ok || !homeOK {
 		return false
 	}
@@ -402,9 +478,16 @@ func (g Guard) safeDrive(abs, mount string) bool {
 	}
 	parts := g.segments(mount, abs)
 	top := parts[0]
+	rl := g.rules()
 	// .Trashes, .Spotlight-V100, .fseventsd…
-	if strings.HasPrefix(top, ".") || g.inList(driveProtectedTop, top) {
+	if strings.HasPrefix(top, ".") || g.inList(rl.driveProtectedTop, top) {
 		return false
+	}
+	// $Recycle.Bin, $WinREAgent…
+	for _, pre := range rl.drivePrefixes {
+		if strings.HasPrefix(top, pre) {
+			return false
+		}
 	}
 	if g.secretAnywhere(parts) {
 		return false
@@ -500,6 +583,10 @@ func NewResolver(g Guard) *Resolver {
 		rg.Known = append(rg.Known, realOr(k))
 	}
 	rg.Drives = realDrives
+	rg.Protected = nil
+	for _, p := range g.Protected {
+		rg.Protected = append(rg.Protected, realOr(p))
+	}
 	r.lexical, r.real = lex, rg
 	r.exact, r.subtree = identities(rg)
 	r.relocated = relocatedLocations(rg)
@@ -512,7 +599,7 @@ func NewResolver(g Guard) *Resolver {
 
 // devOf returns the device of p, 0 when unknown.
 func devOf(p string) uint64 {
-	if fi, err := os.Lstat(p); err == nil {
+	if fi, err := walk.Lstat(p); err == nil {
 		return walk.Dev(fi)
 	}
 	return 0
@@ -572,23 +659,32 @@ func identities(g Guard) (exact, subtree []os.FileInfo) {
 	if !ok {
 		return nil, nil
 	}
-	ex := []string{home, filepath.Join(home, "Library")}
+	rl := g.rules()
+	ex := []string{home}
+	for _, d := range rl.denyTop {
+		ex = append(ex, filepath.Join(home, d))
+	}
 	ex = append(ex, g.Known...)
-	for _, n := range protectedTop {
+	for _, n := range rl.protectedTop {
 		ex = append(ex, filepath.Join(home, n))
 	}
-	if list, err := os.ReadDir(filepath.Join(home, "Library")); err == nil {
-		for _, e := range list {
-			ex = append(ex, filepath.Join(home, "Library", e.Name()))
+	for _, d := range rl.denyTop {
+		if list, err := os.ReadDir(filepath.Join(home, d)); err == nil {
+			for _, e := range list {
+				ex = append(ex, filepath.Join(home, d, e.Name()))
+			}
 		}
 	}
 	var sub []string
-	for _, d := range append(append([][]string{}, secretDirs...), cloudDirs...) {
+	for _, d := range append(append([][]string{}, rl.secretDirs...), rl.cloudDirs...) {
 		sub = append(sub, filepath.Join(append([]string{home}, d...)...))
 	}
-	// the whole Library, whatever its spelling
-	sub = append(sub, filepath.Join(home, "Library"))
-	for _, sg := range secretGlobs {
+	// the whole Library (AppData), whatever its spelling
+	for _, d := range rl.denyTop {
+		sub = append(sub, filepath.Join(home, d))
+	}
+	sub = append(sub, g.Protected...)
+	for _, sg := range rl.secretGlobs {
 		if m, err := filepath.Glob(filepath.Join(home, sg[0], sg[1]+"*")); err == nil {
 			sub = append(sub, m...)
 		}
@@ -603,14 +699,17 @@ func relocatedLocations(g Guard) []string {
 	if !ok {
 		return nil
 	}
+	rl := g.rules()
 	var names [][]string
-	for _, n := range protectedTop {
+	for _, n := range rl.protectedTop {
 		names = append(names, []string{n})
 	}
-	names = append(names, []string{"Library"})
-	names = append(names, secretDirs...)
-	names = append(names, cloudDirs...)
-	for _, sg := range secretGlobs {
+	for _, d := range rl.denyTop {
+		names = append(names, []string{d})
+	}
+	names = append(names, rl.secretDirs...)
+	names = append(names, rl.cloudDirs...)
+	for _, sg := range rl.secretGlobs {
 		if m, err := filepath.Glob(filepath.Join(home, sg[0], sg[1]+"*")); err == nil {
 			for _, p := range m {
 				names = append(names, []string{strings.TrimPrefix(p, home+string(filepath.Separator))})
@@ -636,6 +735,9 @@ func relocatedLocations(g Guard) []string {
 	for _, k := range g.Known {
 		add(k)
 	}
+	for _, p := range g.Protected {
+		add(p)
+	}
 	return out
 }
 
@@ -650,14 +752,15 @@ func (r *Resolver) protectedByIdentity(real string) bool {
 		}
 	}
 	for a := real; a != "/" && a != "." && a != ""; a = filepath.Dir(a) {
-		fi, err := os.Stat(a)
-		if err != nil {
-			continue
-		}
-		for _, sdir := range r.subtree {
-			if os.SameFile(fi, sdir) {
-				return true
+		if fi, err := os.Stat(a); err == nil {
+			for _, sdir := range r.subtree {
+				if os.SameFile(fi, sdir) {
+					return true
+				}
 			}
+		}
+		if filepath.Dir(a) == a { // a drive root (C:\) is its own parent
+			break
 		}
 	}
 	return false
@@ -692,16 +795,29 @@ func (r *Resolver) Resolve(p string) (string, Verdict) {
 		return "", Blocked
 	}
 	abs := filepath.Clean(p)
+	// a junction above the path: Windows follows it, EvalSymlinks does not
+	// (it fails there, or the file reads as gone), so it is looked for first
+	if r.real.Windows && reparseAbove(abs) {
+		return "", Blocked
+	}
 	fi, err := os.Lstat(abs)
 	if err != nil {
 		return "", missingOrBlocked(err)
 	}
-	if fi.Mode()&fs.ModeSymlink != 0 {
+	// a link, or a Windows junction or other reparse point (irregular)
+	if fi.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
 		return "", Blocked
 	}
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
+		if r.real.Windows {
+			return "", Blocked // it was there a moment ago
+		}
 		return "", missingOrBlocked(err)
+	}
+	// EvalSymlinks leaves Windows junctions in place: none may lead there
+	if r.real.Windows && reparseBetween(filepath.VolumeName(real)+string(filepath.Separator), real) {
+		return "", Blocked
 	}
 	if !r.real.Safe(real) || r.real.inPackage(real) || r.protectedByIdentity(real) || r.holdsRelocated(real) {
 		return "", Blocked
@@ -746,7 +862,43 @@ func ContainedIn(root, target string, foldCase bool) bool {
 	if err != nil {
 		return false
 	}
-	return g.norm(realTarget) == g.norm(filepath.Join(realRoot, rel))
+	if g.norm(realTarget) != g.norm(filepath.Join(realRoot, rel)) {
+		return false
+	}
+	// EvalSymlinks does not resolve a Windows junction: look for one
+	return filepath.Separator != '\\' || !reparseBetween(rootAbs, targetAbs)
+}
+
+// reparseBetween reports whether p, or a folder above it below top, is a
+// link or another reparse point (a junction or mount point reads as
+// irregular on Windows), or cannot be examined.
+func reparseBetween(top, p string) bool {
+	g := Guard{FoldCase: true}
+	for a := p; g.Inside(top, a); a = filepath.Dir(a) {
+		fi, err := os.Lstat(a)
+		if err != nil || fi.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// reparseAbove reports whether a folder above p, up to its volume root, is a
+// link or another reparse point, or cannot be examined. A folder that does
+// not exist is passed over, so that a path that is gone still reads as gone.
+func reparseAbove(p string) bool {
+	top := filepath.VolumeName(p) + string(filepath.Separator)
+	g := Guard{FoldCase: true}
+	for a := filepath.Dir(p); g.Inside(top, a); a = filepath.Dir(a) {
+		fi, err := os.Lstat(a)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil || fi.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanAbs(p string) (string, bool) {
@@ -784,7 +936,7 @@ func AppBundle(home, p string) bool {
 }
 
 // Tilde shows the home folder as ~. The path is cleaned first, and matched
-// the way the file system matches names.
+// the way the file system matches names. On Windows it reads ~\x.
 func Tilde(home, p string) string {
 	if home == "" || !filepath.IsAbs(p) {
 		return p
@@ -795,18 +947,20 @@ func Tilde(home, p string) string {
 		return "~"
 	}
 	if g.Inside(home, p) {
-		n := len(strings.Split(home, "/"))
-		return "~/" + strings.Join(strings.Split(p, "/")[n:], "/")
+		sep := string(filepath.Separator)
+		n := len(strings.Split(home, sep))
+		return "~" + sep + strings.Join(strings.Split(p, sep)[n:], sep)
 	}
 	return p
 }
 
-// ExpandTilde turns ~ and ~/x into absolute paths below home.
+// ExpandTilde turns ~ and ~/x (on Windows also ~\x) into absolute paths
+// below home.
 func ExpandTilde(home, p string) string {
 	if p == "~" {
 		return home
 	}
-	if strings.HasPrefix(p, "~/") {
+	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, "~"+string(filepath.Separator)) {
 		return filepath.Join(home, p[2:])
 	}
 	return p

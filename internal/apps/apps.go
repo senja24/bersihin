@@ -1,4 +1,5 @@
-// Package apps lists the installed applications and moves one to the Trash.
+// Package apps lists the installed applications and removes one: on a Mac by
+// moving its bundle to the Trash, on Windows by starting its own uninstaller.
 package apps
 
 import (
@@ -19,6 +20,7 @@ import (
 	"dev.agus.bersihin/internal/progress"
 	"dev.agus.bersihin/internal/sys"
 	"dev.agus.bersihin/internal/walk"
+	"dev.agus.bersihin/internal/winreg"
 )
 
 // Manager lists apps and remembers which id is which bundle: the page only
@@ -34,8 +36,18 @@ type Manager struct {
 	// Logf reports problems worth a log line; default log.Printf.
 	Logf func(format string, args ...any)
 
+	// Registry, when set, makes this the Windows Manager: programs come from
+	// the Uninstall keys (see windows.go) and Run, Roots and Trash are unused.
+	Registry winreg.Registry
+	// Launch starts a program's uninstaller (ShellExecute, which shows the
+	// UAC prompt when it needs one). Nil: nothing can be uninstalled.
+	Launch func(exe, args string) error
+	// Getenv expands %SystemRoot% and the like in uninstall commands.
+	Getenv func(string) string
+
 	mu    sync.Mutex
-	paths map[string]string // id -> bundle, only apps that may be uninstalled
+	paths map[string]string    // id -> bundle, only apps that may be uninstalled
+	win   map[string]winTarget // id -> Uninstall key, on Windows
 }
 
 type bundle struct {
@@ -173,6 +185,9 @@ func (m *Manager) lastUsed(ctx context.Context, paths []string) map[string]int64
 
 // List returns the installed apps sorted by name and refreshes the id table.
 func (m *Manager) List(ctx context.Context, rep progress.Reporter) ([]model.InstalledApp, error) {
+	if m.Registry != nil {
+		return m.listWindows(ctx, rep)
+	}
 	apps := []model.InstalledApp{}
 	if m.Run == nil {
 		return apps, nil
@@ -221,6 +236,9 @@ func (m *Manager) List(ctx context.Context, rep progress.Reporter) ([]model.Inst
 // List that are not Apple's, still sit in an Applications folder and are real
 // bundles qualify.
 func (m *Manager) Uninstall(ctx context.Context, id string) model.UninstallResult {
+	if m.Registry != nil {
+		return m.uninstallWindows(ctx, id)
+	}
 	if m.Run == nil || m.Trash == nil {
 		return model.UninstallResult{Message: "Uninstalling is not supported on this system"}
 	}

@@ -75,10 +75,13 @@ type Snap struct {
 	// Downloads are the old downloads the junk scan offered (path -> what it
 	// saw); a clean moves only those.
 	Downloads map[string]Seen
-	Large     map[string]Stamp
-	Dupes     []Group
-	DupeAt    map[string]int // path -> index into Dupes
-	Apps      map[string]bool
+	// RecycleBin is the Windows Recycle Bin as the junk scan measured it
+	// (bytes, items); a clean empties it only if it holds no more.
+	RecycleBin *[2]int64
+	Large      map[string]Stamp
+	Dupes      []Group
+	DupeAt     map[string]int // path -> index into Dupes
+	Apps       map[string]bool
 
 	stored time.Time
 }

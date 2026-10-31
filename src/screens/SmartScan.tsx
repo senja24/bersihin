@@ -8,7 +8,7 @@ import { pressClean, needsAsk, sourceOfClick, type PressSource } from "../lib/ar
 import { cleanSummary } from "../lib/cleanSummary";
 import { countOf, formatBytes, isIrreversible, splitBytes, sumOf, timeAgo } from "../lib/format";
 import { useCachedScan, usePatch, useTween } from "../lib/hooks";
-import { useApp, useLive } from "../store";
+import { hasView, useApp, useLive } from "../store";
 import "./home.css";
 
 const MIB = 1024 * 1024;
@@ -179,9 +179,14 @@ function SmartScan() {
   const quiet = () => undefined;
   // A scan that failed or was cancelled shows a dash and a hint; opening the screen starts it again.
   const lost = (scan: { broken: boolean; cancelled: boolean; data: unknown }) => !scan.data && (scan.broken || scan.cancelled);
-  const login = useCachedScan("startup", () => api.startupItems(), quiet);
-  const guard = useCachedScan("protection", () => api.protection(), quiet);
-  const catalog = useCachedScan("apps", (runId) => api.installedApps(runId), quiet);
+  // a screen the platform does not have gets no tile, and its scan never runs
+  const { platform } = app;
+  const showSpeed = hasView(platform, "speed");
+  const showProtection = hasView(platform, "protection");
+  const showApps = hasView(platform, "applications");
+  const login = useCachedScan(showSpeed ? "startup" : null, () => api.startupItems(), quiet);
+  const guard = useCachedScan(showProtection ? "protection" : null, () => api.protection(), quiet);
+  const catalog = useCachedScan(showApps ? "apps" : null, (runId) => api.installedApps(runId), quiet);
 
   const logins = login.data;
   const active = (logins ?? []).filter((i) => i.enabled);
@@ -211,7 +216,7 @@ function SmartScan() {
             <div className="hero-number" aria-live="polite">
               <span>{shown.value}</span> <small>{shown.unit}</small>
             </div>
-            <p>Caches and temp files are deleted for good - they rebuild themselves. Your own files always go to Trash.</p>
+            <p>Caches and temp files are deleted for good - they rebuild themselves. Your own files always go to the {platform.trash}.</p>
             <div className="actions">
               <Capsule
                 label={capsule[0]}
@@ -295,7 +300,7 @@ function SmartScan() {
         </section>
       </div>
 
-      <div className="tiles">
+      <div className="tiles" data-count={1 + Number(showSpeed) + Number(showProtection) + Number(showApps)}>
         <Tile
           kind="clean"
           title="Cleanup"
@@ -336,6 +341,7 @@ function SmartScan() {
           </div>
         </Tile>
 
+        {showSpeed && (
         <Tile kind="speed" title="Speed" icon="gauge" delay={0.3} decor={<span className="tile-glow" style={{ left: 20, top: 80, animationDuration: "6s" }} />}>
           <div className="tile-number">
             {logins ? (
@@ -357,7 +363,9 @@ function SmartScan() {
             </button>
           </div>
         </Tile>
+        )}
 
+        {showProtection && (
         <Tile
           kind="protect"
           title="Protection"
@@ -395,7 +403,9 @@ function SmartScan() {
             ))}
           </div>
         </Tile>
+        )}
 
+        {showApps && (
         <Tile
           kind="apps"
           title="Applications"
@@ -427,6 +437,7 @@ function SmartScan() {
             </button>
           </div>
         </Tile>
+        )}
       </div>
     </div>
   );

@@ -45,7 +45,7 @@ type Entry struct {
 // that sits inside another.
 func Roots(home string) []string {
 	var all []string
-	for _, n := range []string{"Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music"} {
+	for _, n := range []string{"Desktop", "Documents", "Downloads", "Pictures", videos, "Music"} {
 		all = append(all, filepath.Join(home, n))
 	}
 	var out []string
@@ -93,6 +93,12 @@ func Collect(ctx context.Context, roots []string, seen func(n int, dir string)) 
 				n++
 				if !eligible(f) {
 					return
+				}
+				if f.Ino == 0 {
+					// Windows: the walk reads no file index, ask for this file's
+					if fi, err := walk.Lstat(f.Path); err == nil {
+						f.Dev, f.Ino = walk.Dev(fi), walk.Ino(fi)
+					}
 				}
 				if f.Ino != 0 {
 					key := [2]uint64{f.Dev, f.Ino}

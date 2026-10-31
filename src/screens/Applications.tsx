@@ -7,7 +7,8 @@ import { isConfirmError, isScanExpired } from "../lib/confirm";
 import { countOf, formatBytes, messageOf, sumOf, timeAgo } from "../lib/format";
 import { useCachedScan, useIcons, usePatch } from "../lib/hooks";
 import { createSingleFlight } from "../lib/singleFlight";
-import { useApp } from "../store";
+import { appWords, type AppWords } from "../lib/systemWords";
+import { useApp, usePlatform } from "../store";
 import type { InstalledApp } from "../types";
 import "./system.css";
 
@@ -33,11 +34,11 @@ function Avatar({ app, image }: { app: InstalledApp; image: string | undefined }
   );
 }
 
-function InlineConfirm({ onCancel, onGo }: { onCancel: () => void; onGo: () => void }) {
+function InlineConfirm({ words, onCancel, onGo }: { words: AppWords; onCancel: () => void; onGo: () => void }) {
   const guard = useConfirmGuard(onGo);
   return (
     <div className="inline-confirm">
-      <span>Uninstall?</span>
+      <span>{words.ask}</span>
       <button type="button" className="pbtn sm quiet" onClick={onCancel}>
         Cancel
       </button>
@@ -48,19 +49,19 @@ function InlineConfirm({ onCancel, onGo }: { onCancel: () => void; onGo: () => v
   );
 }
 
-function AppRow({ app, image, phase, anyBusy, onAsk, onCancel, onGo }: {
-  app: InstalledApp; image: string | undefined; phase: "idle" | "asking" | "working"; anyBusy: boolean; onAsk: () => void; onCancel: () => void; onGo: () => void;
+function AppRow({ app, image, phase, anyBusy, words, onAsk, onCancel, onGo }: {
+  app: InstalledApp; image: string | undefined; phase: "idle" | "asking" | "working"; anyBusy: boolean; words: AppWords; onAsk: () => void; onCancel: () => void; onGo: () => void;
 }) {
   let action;
   if (phase === "working") {
     action = (
       <span className="locked">
         <Spinner />
-        Removing
+        {words.working}
       </span>
     );
   } else if (phase === "asking") {
-    action = <InlineConfirm onCancel={onCancel} onGo={onGo} />;
+    action = <InlineConfirm words={words} onCancel={onCancel} onGo={onGo} />;
   } else if (app.canUninstall) {
     action = (
       <button type="button" className="pbtn sm" disabled={anyBusy} onClick={onAsk}>
@@ -70,9 +71,9 @@ function AppRow({ app, image, phase, anyBusy, onAsk, onCancel, onGo }: {
     );
   } else {
     action = (
-      <span className="locked" title="This app is part of macOS">
+      <span className="locked" title={words.lockedTitle}>
         <Icon name="lock" size={14} />
-        Built in
+        {words.locked}
       </span>
     );
   }
@@ -94,6 +95,7 @@ function AppRow({ app, image, phase, anyBusy, onAsk, onCancel, onGo }: {
 
 function Applications() {
   const { notify, afterChange } = useApp();
+  const words = appWords(usePlatform());
   const scan = useCachedScan("apps", (runId) => api.installedApps(runId), (e) => notify(messageOf(e, "Could not list your apps"), "err"));
   const apps = scan.data;
   const [ui, set] = usePatch<{ search: string; order: Order; asking: string | null; working: string | null }>({ search: "", order: "size", asking: null, working: null });
@@ -125,7 +127,10 @@ function Applications() {
     try {
       const out = await api.uninstallApp(scanId, app.id);
       notify(out.message || (out.ok ? `${app.name} removed` : `Could not uninstall ${app.name}`), out.ok ? "ok" : "err");
-      if (out.ok) {
+      if (out.ok && out.pending) {
+        // Windows: the uninstaller is open and may still be cancelled, so the app stays until the list is read again
+        afterChange();
+      } else if (out.ok) {
         scan.replace((apps ?? []).filter((a) => a.id !== app.id));
         afterChange();
       } else {
@@ -189,6 +194,7 @@ function Applications() {
               image={app.iconPath ? icons[app.iconPath] : undefined}
               phase={ui.working === app.id ? "working" : ui.asking === app.id ? "asking" : "idle"}
               anyBusy={ui.working !== null}
+              words={words}
               onAsk={() => set({ asking: app.id })}
               onCancel={() => set({ asking: null })}
               onGo={() => void removeApp(app)}
@@ -201,7 +207,7 @@ function Applications() {
 
   return (
     <div className="screen">
-      <PageHead title="Applications" sub="Everything installed on this Mac. Remove the ones you no longer use through the app's own uninstaller.">
+      <PageHead title="Applications" sub={words.sub}>
         {apps && (
           <div className="head-meta">
             <b>{apps.length}</b> apps

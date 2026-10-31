@@ -194,7 +194,7 @@ func classifyTransport(ctx context.Context, err error) *callError {
 	case errors.As(err, &certErr), errors.As(err, &recHdr), errors.As(err, &unkAuth), errors.As(err, &hostErr), errors.As(err, &invalid),
 		strings.Contains(err.Error(), "server gave HTTP response to HTTPS client"):
 		return &callError{code: codeTLS}
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case errors.Is(err, syscall.ECONNREFUSED), errors.Is(err, errConnRefused):
 		return &callError{code: codeRefused}
 	case errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()):
 		return &callError{code: codeTimeout}

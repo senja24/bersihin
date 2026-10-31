@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"dev.agus.bersihin/internal/progress"
 	"dev.agus.bersihin/internal/settings"
 	"dev.agus.bersihin/internal/snapshot"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 type fakeShell struct {
@@ -211,7 +213,11 @@ func TestTrashPathsGoesThroughTheGuard(t *testing.T) {
 	a := filepath.Join(e.home, "Downloads", "a.zip")
 	put(t, a, 10, 0)
 	put(t, filepath.Join(e.home, ".ssh", "id_rsa"), 1, 0)
-	paths := []string{a, filepath.Join(e.home, ".ssh", "id_rsa"), e.home, "/etc/passwd"}
+	system := "/etc/passwd"
+	if testenv.Windows {
+		system = filepath.Join(os.Getenv("SystemRoot"), "win.ini")
+	}
+	paths := []string{a, filepath.Join(e.home, ".ssh", "id_rsa"), e.home, system}
 	res, err := e.trash(e.inject(t, paths...), paths)
 	if err != nil {
 		t.Fatal(err)
@@ -225,6 +231,7 @@ func TestTrashPathsGoesThroughTheGuard(t *testing.T) {
 }
 
 func TestJunkScanAndCancelScan(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	for i := range 6 {
 		put(t, filepath.Join(e.home, "Library", "Logs", "app"+string(rune('a'+i)), "x.log"), 100, 48*time.Hour)
@@ -265,6 +272,7 @@ func TestJunkScanAndCancelScan(t *testing.T) {
 }
 
 func TestJunkCleanOnlyReceivesIDs(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	log := filepath.Join(e.home, "Library", "Logs", "app", "x.log")
 	keep := filepath.Join(e.home, "Documents", "x.txt")
@@ -290,6 +298,7 @@ func TestJunkCleanOnlyReceivesIDs(t *testing.T) {
 }
 
 func TestScansReturnData(t *testing.T) {
+	testenv.MacLayout(t)
 	e := newEnv(t)
 	put(t, filepath.Join(e.home, "Documents", "report.pdf"), 2000, 0)
 	put(t, filepath.Join(e.home, "Movies", "film.mov"), 3*1024*1024, 0)
@@ -411,7 +420,9 @@ func TestSettingsAndAssistantEndToEnd(t *testing.T) {
 	if gotAuth != key {
 		t.Errorf("api key header = %q", gotAuth)
 	}
-	if strings.Contains(gotBody, home) || !strings.Contains(gotBody, "~/Movies/a.mkv") {
+	// ~/Movies/a.mkv; ~\Movies\a.mkv on Windows, its backslashes escaped in the JSON
+	slashed := regexp.MustCompile(`\\+`).ReplaceAllString(gotBody, "/")
+	if strings.Contains(gotBody, home) || strings.Contains(slashed, filepath.ToSlash(home)) || !strings.Contains(slashed, "~/Movies/a.mkv") {
 		t.Errorf("home folder not redacted: %s", gotBody)
 	}
 }

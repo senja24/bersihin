@@ -14,6 +14,7 @@ import (
 
 	"dev.agus.bersihin/internal/config"
 	"dev.agus.bersihin/internal/model"
+	"dev.agus.bersihin/internal/testenv"
 )
 
 const home = "/Users/agus"
@@ -32,6 +33,7 @@ func sampleContext() model.AiContext {
 }
 
 func TestBuildContext(t *testing.T) {
+	testenv.MacPaths(t)
 	data, known := BuildContext(home, sampleContext())
 	b, _ := json.Marshal(data)
 	js := string(b)
@@ -88,6 +90,7 @@ func TestBuildContextCapsAndCleans(t *testing.T) {
 }
 
 func TestTildeUntilde(t *testing.T) {
+	testenv.MacPaths(t)
 	for in, want := range map[string]string{
 		"/Users/agus": "~", "/Users/agus/": "~", "/Users/agus//a/../a/b/": "~/a/b", "/Users/agus/a/b": "~/a/b", "/users/AGUS/a": "~/a",
 		"/Users/agustin/a": "/Users/agustin/a", "/tmp/x": "/tmp/x", "": "",
@@ -107,6 +110,7 @@ func TestTildeUntilde(t *testing.T) {
 }
 
 func TestParseAdvice(t *testing.T) {
+	testenv.MacPaths(t)
 	_, known := BuildContext(home, sampleContext())
 	raw := `{"answer":"  Remove the caches.  ","suggestions":[
 		{"path":"~/Library/Caches","verdict":"safe","reason":"Regenerable."},
@@ -188,6 +192,7 @@ func service(url string, provider model.AiProvider, key string) *Service {
 }
 
 func TestAskClaude(t *testing.T) {
+	testenv.MacPaths(t)
 	var gotHeaders http.Header
 	var gotBody map[string]any
 	var rawBody string
@@ -248,6 +253,7 @@ func TestAskClaude(t *testing.T) {
 }
 
 func TestAskOpenAI(t *testing.T) {
+	testenv.MacPaths(t)
 	var gotHeaders http.Header
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -440,6 +446,7 @@ func TestRedirectsAreNotFollowed(t *testing.T) {
 }
 
 func TestRedactsJunkNamesAndUncleanedPaths(t *testing.T) {
+	testenv.MacPaths(t)
 	data, _ := BuildContext(home, model.AiContext{
 		Junk:       []model.AiJunk{{Name: "Cache of /Users/agus/Library", Locations: []string{"/Users/agus//Library/../Library/Caches/"}}},
 		LargeFiles: []model.AiLargeFile{{Path: "/Users/agus/Movies/./x.mkv", Size: 1}},

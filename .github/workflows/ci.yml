@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Vet
+        run: go vet ./...
+      - name: Build (amd64, arm64)
+        shell: bash
+        run: |
+          GOARCH=amd64 go build ./...
+          GOARCH=arm64 go build ./...
+      - name: Go tests
+        # the whole suite gates the build. Tests of the macOS rules on POSIX paths, and tests
+        # that need symlinks, Unix permission bits or the Unix ctime, skip themselves on Windows
+        # with the reason (internal/testenv); the Windows rules have their own tests.
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout 15m -v ./... 2>&1 | tee go-test.log | grep -E '^(ok|FAIL|panic)|--- FAIL'
+      - name: Go test failures
+        # what each failing test said, and where a panic or timeout was
+        if: failure()
+        shell: bash
+        run: |
+          grep -n -E -A20 -- '--- FAIL|^panic:' go-test.log | head -n 3000 || true
+      - name: Upload the Go test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-test-log-windows
+          path: go-test.log
+          if-no-files-found: warn
+      - name: Tests skipped on Windows
+        # every skip with its reason, so a skip that hides a regression is seen
+        if: always()
+        shell: bash
+        run: grep -E -A1 -- '--- SKIP' go-test.log || true
+      - name: Page checks
+        run: |
+          bun run typecheck
+          bun test
+      - name: Build the app
+        run: bun run build -- -platform windows/amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bersihin-windows-amd64
+          path: build/windows-amd64/
+          if-no-files-found: warn
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - run: bun run typecheck
+      - run: bun test

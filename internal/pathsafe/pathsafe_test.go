@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dev.agus.bersihin/internal/testenv"
 )
 
 const home = "/Users/alice"
@@ -12,6 +14,7 @@ const home = "/Users/alice"
 func guard() Guard { return NewGuard(home, []string{"/Volumes/Data"}) }
 
 func TestSafeLexical(t *testing.T) {
+	testenv.MacPaths(t)
 	long := "/Users/alice/" + strings.Repeat("a", 5000)
 	tests := []struct {
 		name string
@@ -220,6 +223,7 @@ func TestSafeLexical(t *testing.T) {
 }
 
 func TestSafeCaseSensitive(t *testing.T) {
+	testenv.MacPaths(t)
 	g := guard()
 	g.FoldCase = false
 	tests := []struct {
@@ -240,6 +244,7 @@ func TestSafeCaseSensitive(t *testing.T) {
 }
 
 func TestSafeKnownFolderRedirectedToDataVolume(t *testing.T) {
+	testenv.MacPaths(t)
 	g := guard()
 	g.Known = append(g.Known, "/Volumes/Data/Users/alice/Documents")
 	g.Drives = []string{"/Volumes/Data", "/Volumes/Archive"}
@@ -314,12 +319,13 @@ func touch(t *testing.T, p string) {
 
 func symlink(t *testing.T, target, link string) {
 	t.Helper()
-	if err := os.Symlink(target, link); err != nil {
+	if err := testenv.Symlink(t, target, link); err != nil {
 		t.Skip("symlinks unavailable:", err)
 	}
 }
 
 func TestResolve(t *testing.T) {
+	testenv.MacPaths(t)
 	g, h, outside := realTree(t)
 	touch(t, filepath.Join(h, "Downloads", "a.zip"))
 	touch(t, filepath.Join(outside, "precious"))
@@ -375,6 +381,7 @@ func TestResolve(t *testing.T) {
 }
 
 func TestResolveHomeThroughSymlink(t *testing.T) {
+	testenv.MacPaths(t)
 	// /base/link -> /base/real/alice ; the user's home is reached through the link
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	real := filepath.Join(base, "real", "alice")
@@ -401,6 +408,7 @@ func TestResolveHomeThroughSymlink(t *testing.T) {
 }
 
 func TestResolveDataDrive(t *testing.T) {
+	testenv.MacPaths(t)
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	h := filepath.Join(base, "home", "alice")
 	vol := filepath.Join(base, "vol")
@@ -450,6 +458,7 @@ func TestResolverDropsLinkedDrives(t *testing.T) {
 }
 
 func TestContainedIn(t *testing.T) {
+	testenv.MacPaths(t)
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	root := filepath.Join(base, "caches")
 	outside := filepath.Join(base, "outside")
@@ -530,6 +539,7 @@ func TestAppBundle(t *testing.T) {
 }
 
 func TestTildeAndExpand(t *testing.T) {
+	testenv.MacPaths(t)
 	for in, want := range map[string]string{
 		home:                   "~",
 		home + "/":             "~",
@@ -569,6 +579,7 @@ func TestContainedInRejectsLinkInTheMiddle(t *testing.T) {
 }
 
 func TestSafeUnicodeAndSpellingVariants(t *testing.T) {
+	testenv.MacPaths(t)
 	g := guard()
 	nfd := func(s string) string { return strings.NewReplacer("\u00E9", "e\u0301").Replace(s) }
 	tests := []struct {
@@ -648,6 +659,7 @@ func TestSafeUnicodeAndSpellingVariants(t *testing.T) {
 }
 
 func TestFoldMatchesHomeSpellings(t *testing.T) {
+	testenv.MacPaths(t)
 	// the home folder written with other case, composition or invisible characters
 	g := NewGuard("/Users/Zo\u00EB", nil) // NFC \u00EB
 	for path, want := range map[string]bool{
@@ -681,6 +693,7 @@ func TestFoldMatchesHomeSpellings(t *testing.T) {
 }
 
 func TestSafeRefusesFolderHoldingARedirectedUserFolder(t *testing.T) {
+	testenv.MacPaths(t)
 	g := guard()
 	g.Known = append(g.Known, home+"/Work/Documents") // Documents is a link into ~/Work
 	for path, want := range map[string]bool{
@@ -700,6 +713,7 @@ func TestSafeRefusesFolderHoldingARedirectedUserFolder(t *testing.T) {
 }
 
 func TestResolveFolderHoldingRedirectedDocuments(t *testing.T) {
+	testenv.MacPaths(t)
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	h := filepath.Join(base, "alice")
 	os.MkdirAll(filepath.Join(h, "Work", "Documents"), 0o755)
@@ -721,6 +735,7 @@ func TestResolveFolderHoldingRedirectedDocuments(t *testing.T) {
 }
 
 func TestProtectedByIdentity(t *testing.T) {
+	testenv.MacPaths(t)
 	g, h, _ := realTree(t)
 	os.MkdirAll(filepath.Join(h, "Library", "Caches"), 0o755)
 	r := NewResolver(g)
@@ -749,6 +764,7 @@ func TestProtectedByIdentity(t *testing.T) {
 }
 
 func TestTildeOfUncleanedPaths(t *testing.T) {
+	testenv.MacPaths(t)
 	for in, want := range map[string]string{
 		home + "/Downloads/../Downloads/a": "~/Downloads/a",
 		home + "//Downloads///a/":          "~/Downloads/a",
@@ -770,6 +786,7 @@ func TestTildeOfUncleanedPaths(t *testing.T) {
 }
 
 func TestContainedInRootCaseVariants(t *testing.T) {
+	testenv.MacPaths(t)
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	root := filepath.Join(base, "Caches")
 	os.MkdirAll(filepath.Join(root, "app"), 0o755)
@@ -800,6 +817,7 @@ func TestContainedInRootCaseVariants(t *testing.T) {
 
 // A folder named "..<ZWNJ>" folds to ".." and must never be read as a parent step.
 func TestFoldedDotDotSegmentsAreRefused(t *testing.T) {
+	testenv.MacPaths(t)
 	const zw = "..‌"
 	g := guard()
 	for _, p := range []string{
@@ -862,6 +880,7 @@ func TestFoldedDotDotOnDisk(t *testing.T) {
 // protected as the item: moving ~/.config to ~/dotfiles/config must not make
 // ~/dotfiles trashable.
 func TestResolveRefusesFolderHoldingRelocatedProtectedItem(t *testing.T) {
+	testenv.MacPaths(t)
 	g, h, _ := realTree(t)
 	os.MkdirAll(filepath.Join(h, "dotfiles", "config"), 0o755)
 	os.MkdirAll(filepath.Join(h, "dotfiles2"), 0o755)
@@ -888,6 +907,7 @@ func TestResolveRefusesFolderHoldingRelocatedProtectedItem(t *testing.T) {
 }
 
 func TestResolveRefusesFolderHoldingMovedLibrary(t *testing.T) {
+	testenv.MacPaths(t)
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	h := filepath.Join(base, "home", "alice")
 	vol := filepath.Join(base, "vol")
@@ -996,6 +1016,7 @@ func TestIsPackageName(t *testing.T) {
 }
 
 func TestSafeCloudFolderNamesAtAnyDepth(t *testing.T) {
+	testenv.MacPaths(t)
 	g := guard()
 	for _, n := range []string{
 		"Creative Cloud Files", "Creative Cloud Files (Work)", "Creative Cloud Files Individual", "Resilio Sync", "resilio sync",
@@ -1018,6 +1039,7 @@ func TestSafeCloudFolderNamesAtAnyDepth(t *testing.T) {
 // Nothing inside a package or git store is removed on its own, however the
 // path is spelled; the package as a whole may go.
 func TestResolveRefusesPathsInsidePackages(t *testing.T) {
+	testenv.MacPaths(t)
 	g, h, _ := realTree(t)
 	for _, f := range []string{
 		"Code/App.app/Contents/f.bin", "Code/proj.git/objects/pack/p.pack", "Code/repo/.git/config",
@@ -1093,6 +1115,7 @@ func TestResolveBareRepoShapeNeedsObjectsAndRefs(t *testing.T) {
 }
 
 func TestResolveSyncMarkersOfAnyType(t *testing.T) {
+	testenv.MacPaths(t)
 	g, h, outside := realTree(t)
 	for _, d := range []string{"Work/file-marker", "Work/link-marker", "Work/broken-marker", "Work/resilio", "Work/resilio-file", "Work/plain"} {
 		touch0(t, filepath.Join(h, d, "a.txt"))
@@ -1165,6 +1188,7 @@ func TestResolveCloudNamesApplyToFoldersNotFiles(t *testing.T) {
 // A bare repository whose HEAD is a link is still a repository; the new
 // package types are never entered.
 func TestResolveMorePackageShapes(t *testing.T) {
+	testenv.MacPaths(t)
 	g, h, _ := realTree(t)
 	for _, d := range []string{"Code/linkrepo/objects", "Code/linkrepo/refs"} {
 		if err := os.MkdirAll(filepath.Join(h, d), 0o755); err != nil {

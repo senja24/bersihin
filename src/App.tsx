@@ -22,11 +22,11 @@ const PAGES: Record<View, ComponentType> = {
 };
 
 function Frame() {
-  const { view, prefs, notices } = useApp();
+  const { view, prefs, notices, platform } = useApp();
   const wallpaper = prefs?.background ?? "mist";
   const Page = PAGES[view];
   return (
-    <div className="app" data-bg={wallpaper}>
+    <div className="app" data-bg={wallpaper} data-platform={platform.windows ? "windows" : "darwin"}>
       <div className="backdrop" aria-hidden="true">
         {wallpaper === "mist" && <Mist />}
         {wallpaper === "dots" && [0, 1, 2].map((n) => <i key={n} />)}
